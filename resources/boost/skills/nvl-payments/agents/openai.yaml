@@ -1,0 +1,4 @@
+interface:
+  display_name: "NVL Payments"
+  short_description: "Integrate one-time Stripe order payment workflows"
+  default_prompt: "Use $nvl-payments to implement or review order Checkout, capture, refunds, webhooks, and reconciliation."
