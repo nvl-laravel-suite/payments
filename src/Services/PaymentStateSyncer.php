@@ -91,7 +91,7 @@ final class PaymentStateSyncer
     /** Reject mismatched identities and impossible financial amounts before persistence. */
     public function assertMatches(PaymentAttempt $attempt, StripePaymentState $payment): void
     {
-        if ($payment->accountId !== Config::get('payments.stripe.account_id') || $payment->livemode !== Config::get('payments.stripe.livemode')
+        if ($payment->accountId !== Config::get('nvl-payments.stripe.account_id') || $payment->livemode !== Config::get('nvl-payments.stripe.livemode')
             || ($attempt->stripe_account_id !== null && $attempt->stripe_account_id !== $payment->accountId)
             || ($attempt->stripe_livemode !== null && $attempt->stripe_livemode !== $payment->livemode)
             || ($attempt->stripe_payment_intent_id !== null && $attempt->stripe_payment_intent_id !== $payment->paymentIntentId)

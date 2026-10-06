@@ -2,15 +2,17 @@
 
 declare(strict_types=1);
 
+use Nvl\Support\Config\PackageEnvironment;
+
 return [
     'enabled' => false,
     'connection' => null,
     // Choose vendor migrations or publish them into the host; never enable both modes.
     'migrations' => ['enabled' => false],
     'stripe' => [
-        'secret' => env('PAYMENTS_STRIPE_SECRET'),
-        'webhook_secret' => env('PAYMENTS_STRIPE_WEBHOOK_SECRET'),
-        'account_id' => env('PAYMENTS_STRIPE_ACCOUNT_ID'),
+        'secret' => PackageEnvironment::get('NVL_PAYMENTS_STRIPE_SECRET'),
+        'webhook_secret' => PackageEnvironment::get('NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET'),
+        'account_id' => PackageEnvironment::get('NVL_PAYMENTS_STRIPE_ACCOUNT_ID'),
         'livemode' => false,
     ],
     'allowed_currencies' => [],

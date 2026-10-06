@@ -43,8 +43,8 @@ final class AttachExistingPaymentAction
     {
         $order = $this->orders->resolve($orderReference);
         $this->access->assertCanManage($actor, 'attach_existing', $order);
-        if (! config()->boolean('payments.enabled') || $order->reference !== $orderReference
-            || ! in_array(strtoupper($order->currency), config()->array('payments.allowed_currencies'), true)) {
+        if (! config()->boolean('nvl-payments.enabled') || $order->reference !== $orderReference
+            || ! in_array(strtoupper($order->currency), config()->array('nvl-payments.allowed_currencies'), true)) {
             throw new DomainException('Payments must be enabled for the requested order and currency.');
         }
         $actorId = $actor->getAuthIdentifier();

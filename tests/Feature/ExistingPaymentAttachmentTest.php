@@ -38,7 +38,7 @@ function attachPayment(string $uuid, string $reference = 'pi_existing', string $
 }
 
 beforeEach(function (): void {
-    config(['payments.stripe.account_id' => 'acct_test', 'payments.allowed_currencies' => ['EUR']]);
+    config(['nvl-payments.stripe.account_id' => 'acct_test', 'nvl-payments.allowed_currencies' => ['EUR']]);
     $this->orders = Mockery::mock(PaymentOrderProvider::class);
     $this->orders->shouldReceive('resolve')->with('order-1')->andReturn(new OrderPaymentSnapshot('order-1', 'v1', 1200, 'EUR', 'Order', null, false))->byDefault();
     app()->instance(PaymentOrderProvider::class, $this->orders);
@@ -155,7 +155,7 @@ it('rejects outer transactions before reserving an operation', function (): void
 });
 
 it('uses the configured Payments connection for its journal attempt and after-commit event', function (): void {
-    config(['database.connections.payments_test' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true], 'payments.connection' => 'payments_test']);
+    config(['database.connections.payments_test' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true], 'nvl-payments.connection' => 'payments_test']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     Event::listen(PaymentStateChanged::class, function (): void {
@@ -175,7 +175,7 @@ it('rejects invalid operation and reference inputs before durable reservation', 
 })->with([['re_existing', '019941a2-ef00-7000-8000-000000000001', 'admin'], ['pi_existing', 'invalid', 'admin'], ['pi_existing', '019941a2-ef00-7000-8000-000000000001', '']]);
 
 it('rejects disabled Payments and currencies outside the host allowlist', function (bool $enabled, array $currencies): void {
-    config(['payments.enabled' => $enabled, 'payments.allowed_currencies' => $currencies]);
+    config(['nvl-payments.enabled' => $enabled, 'nvl-payments.allowed_currencies' => $currencies]);
     expect(fn () => attachPayment($this->uuid))->toThrow(DomainException::class);
     expect(PaymentOperation::count())->toBe(0);
 })->with([[false, ['EUR']], [true, ['USD']]]);

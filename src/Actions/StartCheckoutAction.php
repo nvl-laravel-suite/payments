@@ -58,8 +58,8 @@ final class StartCheckoutAction
                     'order_reference' => $order->reference, 'order_revision' => $order->revision,
                     'amount_minor' => $order->amountMinor, 'currency' => strtoupper($order->currency),
                     'origin' => 'checkout', 'state' => 'reserved',
-                    'capture_method' => config('payments.checkout.capture_method', 'automatic'),
-                    'expires_at' => CarbonImmutable::now()->addMinutes(config()->integer('payments.checkout.expires_in_minutes')),
+                    'capture_method' => config('nvl-payments.checkout.capture_method', 'automatic'),
+                    'expires_at' => CarbonImmutable::now()->addMinutes(config()->integer('nvl-payments.checkout.expires_in_minutes')),
                 ]);
                 if (PaymentAttempt::query()->where('order_reference', $order->reference)->whereKeyNot($attempt->id)->whereIn('state', ['processing', 'authorized', 'captured', 'partially_refunded', 'refunded', 'payment_exception'])->exists()) {
                     throw new DomainException('An existing payment blocks another checkout.');
@@ -86,15 +86,15 @@ final class StartCheckoutAction
     /** Validate the configured order and redirect policy before durable writes. */
     private function validate(OrderPaymentSnapshot $order, string $successUrl, string $cancelUrl): void
     {
-        if (! config()->boolean('payments.enabled') || ! $order->payable || ! in_array(strtoupper($order->currency), config()->array('payments.allowed_currencies'), true)) {
+        if (! config()->boolean('nvl-payments.enabled') || ! $order->payable || ! in_array(strtoupper($order->currency), config()->array('nvl-payments.allowed_currencies'), true)) {
             throw new DomainException('Order is not payable with the configured currency.');
         }
-        if (! in_array(config('payments.checkout.capture_method'), ['automatic', 'manual'], true) || config()->integer('payments.checkout.expires_in_minutes') < 30 || config()->integer('payments.checkout.expires_in_minutes') > 1440) {
+        if (! in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'manual'], true) || config()->integer('nvl-payments.checkout.expires_in_minutes') < 30 || config()->integer('nvl-payments.checkout.expires_in_minutes') > 1440) {
             throw new InvalidArgumentException('Invalid Checkout capture method or expiration interval.');
         }
         foreach ([$successUrl, $cancelUrl] as $url) {
             $parts = parse_url($url);
-            if ($parts === false || filter_var($url, FILTER_VALIDATE_URL) === false || ($parts['scheme'] ?? null) !== 'https' || ! in_array(strtolower($parts['host'] ?? ''), config()->array('payments.checkout.return_hosts'), true) || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && $parts['port'] !== 443)) {
+            if ($parts === false || filter_var($url, FILTER_VALIDATE_URL) === false || ($parts['scheme'] ?? null) !== 'https' || ! in_array(strtolower($parts['host'] ?? ''), config()->array('nvl-payments.checkout.return_hosts'), true) || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && $parts['port'] !== 443)) {
                 throw new InvalidArgumentException('Checkout return URLs must use an allowed HTTPS host.');
             }
         }
@@ -215,7 +215,7 @@ final class StartCheckoutAction
     /** Reject remote facts that do not match the reserved payment identity. */
     private function verifySession(PaymentAttempt $attempt, StripeCheckoutState $remote): void
     {
-        if ($remote->sessionId !== $attempt->stripe_checkout_session_id || $remote->accountId !== config('payments.stripe.account_id') || $remote->livemode !== config('payments.stripe.livemode') || ($attempt->stripe_payment_intent_id !== null && $remote->paymentIntentId !== $attempt->stripe_payment_intent_id) || $remote->orderReference !== $attempt->order_reference || $remote->orderRevision !== $attempt->order_revision || $remote->amountMinor !== $attempt->amount_minor || strtoupper($remote->currency) !== $attempt->currency) {
+        if ($remote->sessionId !== $attempt->stripe_checkout_session_id || $remote->accountId !== config('nvl-payments.stripe.account_id') || $remote->livemode !== config('nvl-payments.stripe.livemode') || ($attempt->stripe_payment_intent_id !== null && $remote->paymentIntentId !== $attempt->stripe_payment_intent_id) || $remote->orderReference !== $attempt->order_reference || $remote->orderRevision !== $attempt->order_revision || $remote->amountMinor !== $attempt->amount_minor || strtoupper($remote->currency) !== $attempt->currency) {
             throw new DomainException('Stripe Session does not match its reserved order payment.');
         }
     }

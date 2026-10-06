@@ -51,8 +51,8 @@ final class ProcessPaymentsWebhookAction
                 $locked = PaymentAttempt::whereKey($attempt->id)->lockForUpdate()->firstOrFail();
                 if ($checkout !== null && ($checkout->sessionId !== $locked->stripe_checkout_session_id || $checkout->orderReference !== $locked->order_reference
                     || $checkout->orderRevision !== $locked->order_revision || $checkout->amountMinor !== $locked->amount_minor
-                    || strtolower($checkout->currency) !== strtolower($locked->currency) || $checkout->accountId !== Config::get('payments.stripe.account_id')
-                    || $checkout->livemode !== Config::get('payments.stripe.livemode')
+                    || strtolower($checkout->currency) !== strtolower($locked->currency) || $checkout->accountId !== Config::get('nvl-payments.stripe.account_id')
+                    || $checkout->livemode !== Config::get('nvl-payments.stripe.livemode')
                     || ($locked->stripe_account_id !== null && $checkout->accountId !== $locked->stripe_account_id)
                     || ($locked->stripe_livemode !== null && $checkout->livemode !== $locked->stripe_livemode))) {
                     throw new DomainException('Checkout does not match the reserved attempt.');

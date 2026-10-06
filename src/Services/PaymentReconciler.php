@@ -26,7 +26,7 @@ final class PaymentReconciler
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $connection = $attempt->getConnection();
-        if (! config()->boolean('payments.enabled') || $connection->transactionLevel() !== 0) {
+        if (! config()->boolean('nvl-payments.enabled') || $connection->transactionLevel() !== 0) {
             throw new DomainException('Reconciliation requires enabled Payments outside a transaction.');
         }
         $observedRefunds = PaymentRefund::query()->where('payment_attempt_id', $attempt->id)->orderBy('id')->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
@@ -78,7 +78,7 @@ final class PaymentReconciler
     {
         if ($attempt->origin !== 'checkout' || $checkout->sessionId !== $sessionId
             || ($attempt->stripe_checkout_session_id !== null && $checkout->sessionId !== $attempt->stripe_checkout_session_id)
-            || $checkout->accountId !== config('payments.stripe.account_id') || $checkout->livemode !== config('payments.stripe.livemode')
+            || $checkout->accountId !== config('nvl-payments.stripe.account_id') || $checkout->livemode !== config('nvl-payments.stripe.livemode')
             || ($attempt->stripe_account_id !== null && $checkout->accountId !== $attempt->stripe_account_id)
             || ($attempt->stripe_livemode !== null && $checkout->livemode !== $attempt->stripe_livemode)
             || $checkout->orderReference !== $attempt->order_reference || $checkout->orderRevision !== $attempt->order_revision

@@ -19,8 +19,8 @@ final class VerifyPaymentsWebhookSignature
     /** Verify freshness and the event envelope before resolving application handlers. */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless(Config::get('payments.enabled') === true, 404);
-        $secret = Config::get('payments.stripe.webhook_secret');
+        abort_unless(Config::get('nvl-payments.enabled') === true, 404);
+        $secret = Config::get('nvl-payments.stripe.webhook_secret');
         abort_unless(is_string($secret) && $secret !== '', 503);
         try {
             WebhookSignature::verifyHeader($request->getContent(), $request->header('Stripe-Signature', ''), $secret, 300);
@@ -34,9 +34,9 @@ final class VerifyPaymentsWebhookSignature
             && is_array($payload['data']['object'] ?? null) && is_string($payload['data']['object']['id'] ?? null)
             && strlen($payload['data']['object']['id']) <= 255, 400, 'Malformed Payments event.');
         $event = Event::constructFrom($payload);
-        abort_unless($event->livemode === Config::get('payments.stripe.livemode')
-            && ($event['account'] === null || $event['account'] === Config::get('payments.stripe.account_id')), 400, 'Wrong Payments account or mode.');
-        $request->attributes->set('payments.stripe_event', $event);
+        abort_unless($event->livemode === Config::get('nvl-payments.stripe.livemode')
+            && ($event['account'] === null || $event['account'] === Config::get('nvl-payments.stripe.account_id')), 400, 'Wrong Payments account or mode.');
+        $request->attributes->set('nvl-payments.stripe_event', $event);
 
         $response = $next($request);
 

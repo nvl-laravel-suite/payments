@@ -41,7 +41,7 @@ final class RefundPaymentAction
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->access->assertCanManage($actor, 'refund', $order);
-        if (! config()->boolean('payments.enabled') || $order->reference !== $attempt->order_reference) {
+        if (! config()->boolean('nvl-payments.enabled') || $order->reference !== $attempt->order_reference) {
             throw new DomainException('Payments must be enabled for the requested order.');
         }
         $actorId = $actor->getAuthIdentifier();

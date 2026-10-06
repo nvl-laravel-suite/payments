@@ -14,7 +14,7 @@ return new class extends Migration
     /** Use the configured Payments connection or Laravel's default connection. */
     public function getConnection(): ?string
     {
-        $connection = config('payments.connection');
+        $connection = config('nvl-payments.connection');
 
         return is_string($connection) ? $connection : null;
     }

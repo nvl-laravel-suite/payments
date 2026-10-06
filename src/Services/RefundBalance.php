@@ -57,8 +57,8 @@ final class RefundBalance
     /** Reject uncorrelated, malformed, or changed Stripe refund facts before releasing balance. */
     public function assertMatches(PaymentAttempt $attempt, StripeRefundState $refund, ?PaymentRefund $local = null): void
     {
-        if ((! str_starts_with($refund->refundId, 're_') && ! str_starts_with($refund->refundId, 'pyr_')) || $refund->accountId !== config('payments.stripe.account_id')
-            || $refund->livemode !== config('payments.stripe.livemode')
+        if ((! str_starts_with($refund->refundId, 're_') && ! str_starts_with($refund->refundId, 'pyr_')) || $refund->accountId !== config('nvl-payments.stripe.account_id')
+            || $refund->livemode !== config('nvl-payments.stripe.livemode')
             || ($attempt->stripe_account_id !== null && $attempt->stripe_account_id !== $refund->accountId)
             || ($attempt->stripe_livemode !== null && $attempt->stripe_livemode !== $refund->livemode)
             || ($attempt->stripe_payment_intent_id !== null && $attempt->stripe_payment_intent_id !== $refund->paymentIntentId)

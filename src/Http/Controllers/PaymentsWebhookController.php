@@ -16,7 +16,7 @@ final class PaymentsWebhookController
     /** Delegate verified financial evidence to the ingestion boundary. */
     public function __invoke(Request $request, ProcessPaymentsWebhookAction $action): Response
     {
-        $event = $request->attributes->get('payments.stripe_event');
+        $event = $request->attributes->get('nvl-payments.stripe_event');
         abort_unless($event instanceof Event, 400);
         try {
             $action->execute($event);

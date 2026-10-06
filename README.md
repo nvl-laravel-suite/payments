@@ -8,29 +8,29 @@ For support, [open an issue](https://github.com/nvl-laravel-suite/payments/issue
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/payments:^2.0` |
+| Installed through | `composer require nvl/payments:^5.0` |
 | Module identifier | `nvl/payments` |
 | PHP namespace | `Nvl\Payments` |
 | Service provider | `Nvl\Payments\Providers\PaymentsServiceProvider` |
-| Configuration | `config/payments.php` |
+| Configuration | `config/nvl-payments.php` |
 
 ## Purpose and boundaries
 
 Payments owns Checkout attempts, authorizations, captures, cancellations, attached Stripe payments, refunds, signed webhooks, reconciliation, and an order payment timeline. The host owns Orders, calculated amounts, customer admission, management authorization, fulfillment, and UI. A Checkout return URL does not prove payment; use confirmed package state and its after-commit `PaymentStateChanged` event. This package makes no money movement until explicitly configured and enabled.
 
-Payments requires PHP 8.4, Laravel 13, `nvl/core:^2.0`, and Stripe PHP. It has no dependency on Tenancy, Billing, or Cashier. It does not register Cashier models or change Cashier routes. The optional `nvl/billing` package handles tenant subscriptions separately; both may coexist with separate webhook URLs and signing secrets. The suite metapackage does not install Payments.
+Payments requires PHP 8.4, Laravel 13, `nvl/core:^5.0`, and Stripe PHP. It has no dependency on Tenancy, Billing, or Cashier. It does not register Cashier models or change Cashier routes. The optional `nvl/billing` package handles tenant subscriptions separately; both may coexist with separate webhook URLs and signing secrets. The suite metapackage does not install Payments.
 
 ## Requirements and installation
 
 After its first public mirror tag is indexed on Packagist, install the published package in the host Laravel application:
 
 ```bash
-composer require nvl/payments:^2.0
-php artisan vendor:publish --tag=payments-config
-php artisan vendor:publish --tag=payments-skills
+composer require nvl/payments:^5.0
+php artisan vendor:publish --tag=nvl-payments-config
+php artisan vendor:publish --tag=nvl-payments-skills
 ```
 
-Choose **one** migration source. For vendor-loaded migrations, leave `payments.enabled=false`, set `payments.migrations.enabled=true`, and do not publish `payments-migrations`; the provider loads vendor migrations independently of the payment routes. For host-owned migrations, run `php artisan vendor:publish --tag=payments-migrations`, leave `payments.enabled=false` and `payments.migrations.enabled=false`, and maintain the copied migration in the application. Never run both sources. Set `payments.connection` to a configured database connection or leave it `null` for Laravel's default; Payments does not use Tenancy's connection implicitly. Run `php artisan migrate` while Payments is still disabled, then configure the host bindings and Stripe endpoint before setting `payments.enabled=true`.
+Choose **one** migration source. For vendor-loaded migrations, leave `nvl-payments.enabled=false`, set `nvl-payments.migrations.enabled=true`, and do not publish `nvl-payments-migrations`; the provider loads vendor migrations independently of the payment routes. For host-owned migrations, run `php artisan vendor:publish --tag=nvl-payments-migrations`, leave `nvl-payments.enabled=false` and `nvl-payments.migrations.enabled=false`, and maintain the copied migration in the application. Never run both sources. Set `nvl-payments.connection` to a configured database connection or leave it `null` for Laravel's default; Payments does not use Tenancy's connection implicitly. Run `php artisan migrate` while Payments is still disabled, then configure the host bindings and Stripe endpoint before setting `nvl-payments.enabled=true`.
 
 Bind all three host contracts in an application service provider: `PaymentOrderProvider` returns a trusted `OrderPaymentSnapshot` with server-calculated minor-unit amount, ISO currency, revision and payable flag; `PaymentManagementAccess` checks the authenticated actor and specific operation for that order; `ExistingPaymentOwnership` positively proves that an imported Stripe payment belongs to the order. The default implementations deny all three operations. For example, register your own implementations with `$this->app->bind(\Nvl\Payments\Contracts\PaymentOrderProvider::class, \App\Payments\OrderPaymentProvider::class)` and likewise bind `PaymentManagementAccess` and `ExistingPaymentOwnership`. Do not accept a browser-supplied amount or use a matching amount as ownership proof.
 
@@ -70,7 +70,7 @@ final class OrderPaymentAccess implements PaymentManagementAccess
 
 Register those abilities in the host Order policy and bind this class as `PaymentManagementAccess`. Customer `pay` permission and administrator capture/refund permissions can differ by actor, operation, and order state.
 
-Set `PAYMENTS_STRIPE_SECRET`, `PAYMENTS_STRIPE_WEBHOOK_SECRET`, and `PAYMENTS_STRIPE_ACCOUNT_ID` in the host environment. Configure `payments.stripe.livemode` deliberately, allowlisted `payments.allowed_currencies`, and HTTPS `payments.checkout.return_hosts`. The configured account ID and mode must match the Stripe objects used by this installation. Set `payments.checkout.capture_method` to `automatic` or `manual`. Enable `payments.enabled=true` only after schema, bindings, Stripe credentials and webhook are ready. Run `php artisan nvl:payments:doctor --strict`; `--format=json` gives machine-readable checks without printing secrets.
+Set `NVL_PAYMENTS_STRIPE_SECRET`, `NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET`, and `NVL_PAYMENTS_STRIPE_ACCOUNT_ID` in the host environment. Configure `nvl-payments.stripe.livemode` deliberately, allowlisted `nvl-payments.allowed_currencies`, and HTTPS `nvl-payments.checkout.return_hosts`. The configured account ID and mode must match the Stripe objects used by this installation. Set `nvl-payments.checkout.capture_method` to `automatic` or `manual`. Enable `nvl-payments.enabled=true` only after schema, bindings, Stripe credentials and webhook are ready. Run `php artisan nvl:payments:doctor --strict`; `--format=json` gives machine-readable checks without printing secrets.
 
 ## Checkout and management actions
 
@@ -108,7 +108,7 @@ Run `php artisan nvl:doctor --strict --format=json` to combine the read-only che
 
 ## Next major: isolated schema identities
 
-Use `payments.tables.<logical-key>` for every table and `payments.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
+Use `nvl-payments.tables.<logical-key>` for every table and `nvl-payments.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
 
 | Logical key | New default | Previous name |
 | --- | --- | --- |
@@ -117,4 +117,8 @@ Use `payments.tables.<logical-key>` for every table and `payments.connection` fo
 | `refunds` | `nvl_payments_refunds` | `nvl_payments_refunds` |
 | `webhook_events` | `nvl_payments_webhook_events` | `nvl_payments_webhook_events` |
 
-Migration filenames contain `nvl_payments_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before any migration in the batch runs; legacy storage with old history needs an ownership decision.
+Migration filenames contain `nvl_payments_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before that owned migration runs; use `nvl:schema:preflight` for an explicit whole-batch check; legacy storage with old history needs an ownership decision.
+
+## Canonical configuration ownership
+
+Use `nvl-payments` settings in `config/nvl-payments.php` and canonical package environment names. Old generic roots are foreign unless an upgrading NVL host explicitly selects them in Core's default-off compatibility. Canonical false/null/empty values win; no old roots are populated or written back. Keep logical package/resource IDs unchanged. Review [Core's rename inventory and cache/worker cutover](https://github.com/nvl-laravel-suite/core/blob/main/UPGRADING.md#major-5-canonical-configuration-and-environment).

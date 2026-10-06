@@ -183,7 +183,7 @@ it('passes only the stored original payment and Stripe reason to the gateway', f
 })->with(['duplicate', 'fraudulent']);
 
 it('rejects disabled operation and absent payment identity before gateway calls', function (bool $enabled): void {
-    config(['payments.enabled' => $enabled]);
+    config(['nvl-payments.enabled' => $enabled]);
     if ($enabled) {
         $this->attempt->update(['stripe_payment_intent_id' => null, 'stripe_charge_id' => null]);
     }

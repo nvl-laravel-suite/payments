@@ -20,18 +20,20 @@ use Nvl\Payments\Services\StripePaymentGateway;
 use Nvl\Support\Doctor\DoctorCheck;
 use Nvl\Support\Doctor\PackageDoctorContributor;
 use Nvl\Support\Traits\MergesPackageConfiguration;
+use Nvl\Support\Traits\RegistersNamespacedResources;
 use Stripe\StripeClient;
 
 /** Registers disabled-by-default Payments configuration and migration resources. */
 final class PaymentsServiceProvider extends ServiceProvider
 {
     use MergesPackageConfiguration;
+    use RegistersNamespacedResources;
 
     /** Merge publishable Payments configuration without activating the package. */
     public function register(): void
     {
         PackageDoctorContributor::register($this->app, 'nvl/payments', function (): array {
-            if (config('payments.enabled') !== true) {
+            if (config('nvl-payments.enabled') !== true) {
                 return [new DoctorCheck('enabled', 'info', true, 'Payments is disabled; enable it explicitly before configuring its integrations.')];
             }
 
@@ -40,11 +42,11 @@ final class PaymentsServiceProvider extends ServiceProvider
             return PackageDoctorContributor::booleanChecks($report, 'nvl:payments:doctor');
         });
 
-        $this->mergePackageConfiguration(__DIR__.'/../../config/payments.php', 'payments');
+        $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-payments.php', 'payments');
         $this->app->bindIf(PaymentGateway::class, fn (): StripePaymentGateway => new StripePaymentGateway(
-            new StripeClient(Config::string('payments.stripe.secret')),
-            Config::string('payments.stripe.account_id'),
-            Config::boolean('payments.stripe.livemode'),
+            new StripeClient(Config::string('nvl-payments.stripe.secret')),
+            Config::string('nvl-payments.stripe.account_id'),
+            Config::boolean('nvl-payments.stripe.livemode'),
         ));
         $this->app->bindIf(PaymentOrderProvider::class, DenyPaymentOrderProvider::class);
         $this->app->bindIf(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
@@ -58,18 +60,18 @@ final class PaymentsServiceProvider extends ServiceProvider
         $path = __DIR__.'/../../database/migrations/payments';
 
         $this->publishes([
-            __DIR__.'/../../config/payments.php' => config_path('payments.php'),
+            __DIR__.'/../../config/nvl-payments.php' => config_path('nvl-payments.php'),
         ], 'payments-config');
         $this->publishesMigrations([$path => database_path('migrations')], 'payments-migrations');
         $this->publishes([
             __DIR__.'/../../resources/boost/skills/nvl-payments' => base_path('.agents/skills/nvl-payments'),
         ], 'payments-skills');
 
-        if (config('payments.enabled') === true) {
+        if (config('nvl-payments.enabled') === true) {
             $this->loadRoutesFrom(__DIR__.'/../../routes/web.php');
         }
 
-        if (config('payments.migrations.enabled') === true) {
+        if (config('nvl-payments.migrations.enabled') === true) {
             $this->loadMigrationsFrom($path);
         }
     }

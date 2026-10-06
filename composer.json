@@ -3,13 +3,18 @@
     "description": "Standalone Stripe order payment lifecycle for Laravel applications",
     "type": "library",
     "license": "MIT",
-    "keywords": ["laravel", "payments", "stripe", "orders"],
+    "keywords": [
+        "laravel",
+        "payments",
+        "stripe",
+        "orders"
+    ],
     "require": {
         "php": "^8.4",
         "ext-filter": "*",
         "ext-pdo": "*",
         "laravel/framework": "^13.0",
-        "nvl/core": "^2.0",
+        "nvl/core": "^5.0",
         "stripe/stripe-php": "^21.0",
         "nesbot/carbon": "^3.0",
         "symfony/http-foundation": "^8.0"
@@ -23,30 +28,57 @@
         "pestphp/pest-plugin-laravel": "^4.0"
     },
     "autoload": {
-        "psr-4": {"Nvl\\Payments\\": "src/"}
+        "psr-4": {
+            "Nvl\\Payments\\": "src/"
+        }
     },
     "autoload-dev": {
-        "psr-4": {"Nvl\\Payments\\Tests\\": "tests/"}
+        "psr-4": {
+            "Nvl\\Payments\\Tests\\": "tests/"
+        }
     },
     "scripts": {
         "analyse": "phpstan analyse --memory-limit=2G",
         "format": "pint --parallel --format agent",
         "format:test": "pint --parallel --test --format agent",
-        "quality": ["@format:test", "@analyse", "@test"],
+        "quality": [
+            "@format:test",
+            "@analyse",
+            "@test"
+        ],
         "test": "pest --compact"
     },
     "extra": {
-        "branch-alias": {"dev-main": "2.x-dev"},
+        "branch-alias": {
+            "dev-main": "5.x-dev"
+        },
         "laravel": {
-            "providers": ["Nvl\\Payments\\Providers\\PaymentsServiceProvider"]
+            "providers": [
+                "Nvl\\Payments\\Providers\\PaymentsServiceProvider"
+            ]
         }
     },
     "config": {
-        "allow-plugins": {"pestphp/pest-plugin": true},
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
         "sort-packages": true
     },
     "archive": {
-        "exclude": ["/.temp", "/build", "/coverage", "/.phpunit.cache", "/.phpunit.result.cache", "/phpstan.neon.dist", "/phpunit.xml.dist", "/tests", "/vendor", "/composer.lock"]
+        "exclude": [
+            "/.temp",
+            "/build",
+            "/coverage",
+            "/.phpunit.cache",
+            "/.phpunit.result.cache",
+            "/phpstan.neon.dist",
+            "/phpunit.xml.dist",
+            "/tests",
+            "/vendor",
+            "/composer.lock",
+            "/.DS_Store",
+            "/**/.DS_Store"
+        ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true

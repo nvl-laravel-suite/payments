@@ -34,7 +34,7 @@ function authorizationOperation(string $kind, string $attempt, string $uuid, int
 }
 
 beforeEach(function (): void {
-    config(['payments.stripe.account_id' => 'acct_test']);
+    config(['nvl-payments.stripe.account_id' => 'acct_test']);
     $orders = Mockery::mock(PaymentOrderProvider::class);
     $orders->shouldReceive('resolve')->with('order-1')->andReturn(new OrderPaymentSnapshot('order-1', 'v1', 1200, 'EUR', 'Order', null, false));
     app()->instance(PaymentOrderProvider::class, $orders);
@@ -145,7 +145,7 @@ it('keeps an unexpected remote mutation result unresolved', function (string $ki
 })->with(['capture', 'cancel_authorization']);
 
 it('rejects missing PaymentIntent identity and disabled Payments before remote access', function (bool $enabled, ?string $intent): void {
-    config(['payments.enabled' => $enabled]);
+    config(['nvl-payments.enabled' => $enabled]);
     $this->attempt->update(['stripe_payment_intent_id' => $intent]);
     expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(DomainException::class);
     expect(PaymentOperation::count())->toBe(0);

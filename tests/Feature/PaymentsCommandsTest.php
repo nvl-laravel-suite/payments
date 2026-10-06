@@ -15,7 +15,7 @@ beforeEach(function (): void {
 });
 
 it('reports readiness without printing secrets', function (): void {
-    config(['payments.stripe.secret' => 'sk_test_do_not_print', 'payments.stripe.webhook_secret' => 'whsec_do_not_print']);
+    config(['nvl-payments.stripe.secret' => 'sk_test_do_not_print', 'nvl-payments.stripe.webhook_secret' => 'whsec_do_not_print']);
     $code = Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']);
     $output = Artisan::output();
     expect($code)->toBe(1)->and($output)->not->toContain('sk_test_do_not_print', 'whsec_do_not_print');
@@ -23,7 +23,7 @@ it('reports readiness without printing secrets', function (): void {
 });
 
 it('reconciles a target and a paginated sweep', function (): void {
-    config(['payments.stripe.account_id' => 'acct_test', 'payments.reconciliation.batch_size' => 1]);
+    config(['nvl-payments.stripe.account_id' => 'acct_test', 'nvl-payments.reconciliation.batch_size' => 1]);
     $attempt = createRefundAttempt();
     PaymentAttempt::create(['order_reference' => 'other', 'order_revision' => 'v1', 'amount_minor' => 1200, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'reserved']);
     $gateway = Mockery::mock(PaymentGateway::class);
@@ -35,7 +35,7 @@ it('reconciles a target and a paginated sweep', function (): void {
 });
 
 it('limits a sweep and reads IDs in configured database pages', function (): void {
-    config(['payments.reconciliation.batch_size' => 1, 'payments.reconciliation.max_attempts' => 2]);
+    config(['nvl-payments.reconciliation.batch_size' => 1, 'nvl-payments.reconciliation.max_attempts' => 2]);
     for ($i = 0; $i < 4; $i++) {
         PaymentAttempt::create(['order_reference' => 'order-'.$i, 'order_revision' => 'v1', 'amount_minor' => 1200, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'reserved']);
     }
@@ -51,7 +51,7 @@ it('limits a sweep and reads IDs in configured database pages', function (): voi
 });
 
 it('sanitizes failed reconciliation output and continues the sweep', function (): void {
-    config(['payments.stripe.account_id' => 'acct_test']);
+    config(['nvl-payments.stripe.account_id' => 'acct_test']);
     createRefundAttempt();
     $gateway = Mockery::mock(PaymentGateway::class);
     $gateway->shouldReceive('payment')->andThrow(new RuntimeException('sk_test_secret whsec_secret'));
@@ -61,7 +61,7 @@ it('sanitizes failed reconciliation output and continues the sweep', function ()
 
 it('reports a ready local installation in strict mode', function (): void {
     setupRefundHost();
-    config(['payments.stripe.secret' => 'sk_test_private', 'payments.stripe.webhook_secret' => 'whsec_private', 'payments.allowed_currencies' => ['EUR'], 'payments.checkout.return_hosts' => ['shop.test']]);
+    config(['nvl-payments.stripe.secret' => 'sk_test_private', 'nvl-payments.stripe.webhook_secret' => 'whsec_private', 'nvl-payments.allowed_currencies' => ['EUR'], 'nvl-payments.checkout.return_hosts' => ['shop.test']]);
     expect(Artisan::call('nvl:payments:doctor', ['--strict' => true]))->toBe(0);
     $output = Artisan::output();
     expect($output)->toContain('webhook_route: ready')->not->toContain('sk_test_private', 'whsec_private');
@@ -73,7 +73,7 @@ it('rejects a malformed target without printing it', function (): void {
 });
 
 it('advances bounded sweeps past permanently unresolved attempts', function (): void {
-    config(['payments.stripe.account_id' => 'acct_test', 'payments.reconciliation.batch_size' => 1, 'payments.reconciliation.max_attempts' => 2]);
+    config(['nvl-payments.stripe.account_id' => 'acct_test', 'nvl-payments.reconciliation.batch_size' => 1, 'nvl-payments.reconciliation.max_attempts' => 2]);
     $blocked = [];
     for ($i = 0; $i < 3; $i++) {
         $blocked[] = PaymentAttempt::create(['order_reference' => 'blocked-'.$i, 'order_revision' => 'v1', 'amount_minor' => 1200, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'reserved', 'reservation_key' => 'blocked-'.$i]);

@@ -32,7 +32,7 @@ function remoteRefund(string $id = 're_test', int $amount = 700, string $status 
 
 function setupRefundHost(): void
 {
-    config(['payments.stripe.account_id' => 'acct_test']);
+    config(['nvl-payments.stripe.account_id' => 'acct_test']);
     $orders = Mockery::mock(PaymentOrderProvider::class);
     $orders->shouldReceive('resolve')->with('order-1')->andReturn(new OrderPaymentSnapshot('order-1', 'v1', 1200, 'EUR', 'Order', null, false));
     app()->instance(PaymentOrderProvider::class, $orders);

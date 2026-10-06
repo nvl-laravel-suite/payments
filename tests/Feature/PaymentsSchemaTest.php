@@ -5,11 +5,26 @@ declare(strict_types=1);
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Providers\PaymentsServiceProvider;
+use Nvl\Payments\Services\StripePaymentGateway;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 
 uses(PaymentsSchemaTestCase::class);
+
+it('resolves the default gateway from canonical options while preserving foreign payment configuration', function (): void {
+    $foreign = ['stripe' => ['secret' => ['host-owned'], 'account_id' => null, 'livemode' => 'foreign']];
+    config([
+        'payments' => $foreign,
+        'nvl-payments.stripe.secret' => 'sk_test_nvl_fixture',
+        'nvl-payments.stripe.account_id' => 'acct_nvl_fixture',
+        'nvl-payments.stripe.livemode' => false,
+    ]);
+
+    expect(app(PaymentGateway::class))->toBeInstanceOf(StripePaymentGateway::class)
+        ->and(config('payments'))->toBe($foreign);
+});
 
 it('creates four UUID-backed tables with the expected payment references', function (): void {
     foreach ([PaymentsTables::Attempts, PaymentsTables::Operations, PaymentsTables::Refunds, PaymentsTables::WebhookEvents] as $name) {
@@ -42,7 +57,7 @@ it('allows multiple unreserved attempts but rejects a duplicate reservation', fu
 it('publishes a migration source for host-owned migration mode', function (): void {
     $paths = array_keys(PaymentsServiceProvider::pathsToPublish(
         PaymentsServiceProvider::class,
-        'payments-migrations',
+        'nvl-payments-migrations',
     ));
 
     expect($paths)->toHaveCount(1)

@@ -17,8 +17,8 @@ class PaymentsSchemaTestCase extends PaymentsTestCase
         parent::defineEnvironment($app);
 
         $app['config']->set([
-            'payments.enabled' => true,
-            'payments.migrations.enabled' => true,
+            'nvl-payments.enabled' => true,
+            'nvl-payments.migrations.enabled' => true,
         ]);
     }
 }

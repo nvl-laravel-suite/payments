@@ -23,9 +23,9 @@ uses(PaymentsTestCase::class);
 
 it('discovers the package without activating routes or vendor migrations', function (): void {
     $loaded = app()->getLoadedProviders();
-    expect(config('payments.enabled'))->toBeFalse()
-        ->and(config('payments.migrations.enabled'))->toBeFalse()
-        ->and(config('payments.connection'))->toBeNull()
+    expect(config('nvl-payments.enabled'))->toBeFalse()
+        ->and(config('nvl-payments.migrations.enabled'))->toBeFalse()
+        ->and(config('nvl-payments.connection'))->toBeNull()
         ->and(Route::getRoutes()->getByName('nvl.payments.webhook'))->toBeNull()
         ->and(Schema::hasTable(PaymentsTables::Attempts))->toBeFalse()
         ->and($loaded)->toHaveKeys([SupportServiceProvider::class, DataServiceProvider::class, PaymentsServiceProvider::class])
@@ -33,21 +33,21 @@ it('discovers the package without activating routes or vendor migrations', funct
 });
 
 it('exposes the isolated checkout and Stripe configuration defaults', function (): void {
-    expect(config('payments.stripe'))->toMatchArray([
+    expect(config('nvl-payments.stripe'))->toMatchArray([
         'secret' => null,
         'webhook_secret' => null,
         'account_id' => null,
         'livemode' => false,
-    ])->and(config('payments.allowed_currencies'))->toBe([])
-        ->and(config('payments.checkout'))->toBe([
+    ])->and(config('nvl-payments.allowed_currencies'))->toBe([])
+        ->and(config('nvl-payments.checkout'))->toBe([
             'return_hosts' => [],
             'expires_in_minutes' => 120,
             'capture_method' => 'automatic',
-        ])->and(config('payments.reconciliation.batch_size'))->toBe(100);
+        ])->and(config('nvl-payments.reconciliation.batch_size'))->toBe(100);
 });
 
 it('publishes config, migrations, and agent skills from the package provider', function (): void {
-    foreach (['payments-config', 'payments-migrations', 'payments-skills'] as $tag) {
+    foreach (['nvl-payments-config', 'nvl-payments-migrations', 'nvl-payments-skills'] as $tag) {
         $paths = ServiceProvider::pathsToPublish(PaymentsServiceProvider::class, $tag);
         expect($paths)->toHaveCount(1);
         foreach ($paths as $source => $destination) {
@@ -58,8 +58,8 @@ it('publishes config, migrations, and agent skills from the package provider', f
 });
 
 it('loads opted-in vendor migrations while payment routes remain disabled', function (): void {
-    config()->set('payments.enabled', false);
-    config()->set('payments.migrations.enabled', true);
+    config()->set('nvl-payments.enabled', false);
+    config()->set('nvl-payments.migrations.enabled', true);
 
     (new PaymentsServiceProvider(app()))->boot();
 
@@ -71,7 +71,7 @@ it('loads opted-in vendor migrations while payment routes remain disabled', func
 });
 
 it('resolves the default gateway from Payments credentials account and mode', function (): void {
-    config()->set('payments.stripe', ['secret' => 'sk_test_payments_only', 'account_id' => 'acct_configured', 'livemode' => true]);
+    config()->set('nvl-payments.stripe', ['secret' => 'sk_test_payments_only', 'account_id' => 'acct_configured', 'livemode' => true]);
     $transport = Mockery::mock(ClientInterface::class);
     $transport->shouldReceive('request')->once()->withArgs(function ($method, $url, $headers): bool {
         return $method === 'get' && str_ends_with($url, '/v1/account') && in_array('Authorization: Bearer sk_test_payments_only', $headers, true);

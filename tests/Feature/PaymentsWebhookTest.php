@@ -44,7 +44,7 @@ function deliverWebhook(string $payload, ?int $timestamp = null, string $secret 
 }
 
 beforeEach(function (): void {
-    config(['payments.stripe.webhook_secret' => 'whsec_payments', 'payments.stripe.account_id' => 'acct_one']);
+    config(['nvl-payments.stripe.webhook_secret' => 'whsec_payments', 'nvl-payments.stripe.account_id' => 'acct_one']);
     $this->gateway = Mockery::mock(PaymentGateway::class);
     app()->instance(PaymentGateway::class, $this->gateway);
 });
@@ -174,14 +174,14 @@ it('never links a PaymentIntent from a mismatched Session', function (string $fi
 })->with([['orderReference', 'other'], ['orderRevision', 'v2'], ['sessionId', 'cs_other'], ['accountId', 'acct_other'], ['livemode', true], ['currency', 'usd'], ['amountMinor', 999]]);
 
 it('fails closed when the signing secret is missing or Payments is disabled', function (): void {
-    config(['payments.stripe.webhook_secret' => null]);
+    config(['nvl-payments.stripe.webhook_secret' => null]);
     deliverWebhook(webhookPayload())->assertStatus(503);
-    config(['payments.enabled' => false]);
+    config(['nvl-payments.enabled' => false]);
     deliverWebhook(webhookPayload())->assertNotFound();
 });
 
 it('waits for the configured Payments connection rather than the default connection', function (): void {
-    config(['database.connections.payments_secondary' => config('database.connections.sqlite'), 'payments.connection' => 'payments_secondary']);
+    config(['database.connections.payments_secondary' => config('database.connections.sqlite'), 'nvl-payments.connection' => 'payments_secondary']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     webhookAttempt();
@@ -196,5 +196,5 @@ it('waits for the configured Payments connection rather than the default connect
     $connection->commit();
     expect($events)->toHaveCount(1);
     $migration->down();
-    config(['payments.connection' => null]);
+    config(['nvl-payments.connection' => null]);
 });

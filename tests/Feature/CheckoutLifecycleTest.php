@@ -43,7 +43,7 @@ function checkoutState(string $status = 'open', string $payment = 'unpaid'): Str
 }
 
 beforeEach(function (): void {
-    config(['payments.allowed_currencies' => ['JPY'], 'payments.checkout.return_hosts' => ['shop.test'], 'payments.stripe.account_id' => 'acct_test']);
+    config(['nvl-payments.allowed_currencies' => ['JPY'], 'nvl-payments.checkout.return_hosts' => ['shop.test'], 'nvl-payments.stripe.account_id' => 'acct_test']);
     $this->orders = Mockery::mock(PaymentOrderProvider::class);
     $this->orders->shouldReceive('resolve')->byDefault()->andReturn(checkoutOrder());
     app()->instance(PaymentOrderProvider::class, $this->orders);
@@ -96,7 +96,7 @@ it('blocks processing and paid attempts including imported attempts without rese
 
 it('rejects nonpayable orders and disallowed currencies before reserving', function (bool $payable, array $currencies): void {
     $this->orders->shouldReceive('resolve')->andReturn(checkoutOrder(payable: $payable));
-    config(['payments.allowed_currencies' => $currencies]);
+    config(['nvl-payments.allowed_currencies' => $currencies]);
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect(PaymentAttempt::count())->toBe(0);
 })->with([[false, ['JPY']], [true, ['USD']]]);
@@ -206,7 +206,7 @@ it('reserves one Session across two competing SQLite file processes', function (
     $directory = sys_get_temp_dir().'/payments-checkout-'.Str::uuid();
     mkdir($directory);
     touch($directory.'/database.sqlite');
-    config(['database.connections.checkout_race' => array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000]), 'payments.connection' => 'checkout_race']);
+    config(['database.connections.checkout_race' => array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000]), 'nvl-payments.connection' => 'checkout_race']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     $waitFor = static function (Closure $condition): void {
@@ -276,7 +276,7 @@ it('reserves one Session across two competing SQLite file processes', function (
             pcntl_waitpid($pid, $status);
         }
         DB::purge('checkout_race');
-        config(['payments.connection' => null]);
+        config(['nvl-payments.connection' => null]);
         foreach (glob($directory.'/*') as $file) {
             unlink($file);
         }

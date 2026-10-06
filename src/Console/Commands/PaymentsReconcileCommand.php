@@ -20,7 +20,7 @@ final class PaymentsReconcileCommand extends Command
     /** Repair attempts while reporting sanitized identifiers and outcomes only. */
     public function handle(ReconcilePaymentAction $reconcile): int
     {
-        if (! config()->boolean('payments.enabled')) {
+        if (! config()->boolean('nvl-payments.enabled')) {
             $this->error('Payments is disabled.');
 
             return self::FAILURE;
@@ -31,8 +31,8 @@ final class PaymentsReconcileCommand extends Command
 
             return self::FAILURE;
         }
-        $batch = max(1, min(1000, config()->integer('payments.reconciliation.batch_size', 100)));
-        $maximum = max(1, min(10000, config()->integer('payments.reconciliation.max_attempts', 1000)));
+        $batch = max(1, min(1000, config()->integer('nvl-payments.reconciliation.batch_size', 100)));
+        $maximum = max(1, min(10000, config()->integer('nvl-payments.reconciliation.max_attempts', 1000)));
         $query = PaymentAttempt::query();
         if ($target !== null) {
             $query->whereKey($target);

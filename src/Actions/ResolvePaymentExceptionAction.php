@@ -40,7 +40,7 @@ final class ResolvePaymentExceptionAction
         $order = $this->orders->resolve($attempt->order_reference);
         $this->access->assertCanManage($actor, 'resolve_payment_exception', $order);
         $connection = $attempt->getConnection();
-        if (! config()->boolean('payments.enabled') || $order->reference !== $attempt->order_reference || $connection->transactionLevel() !== 0) {
+        if (! config()->boolean('nvl-payments.enabled') || $order->reference !== $attempt->order_reference || $connection->transactionLevel() !== 0) {
             throw new DomainException('Exception resolution requires enabled Payments outside a transaction.');
         }
         $actorId = $actor->getAuthIdentifier();

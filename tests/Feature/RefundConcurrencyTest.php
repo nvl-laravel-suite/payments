@@ -27,7 +27,7 @@ it('atomically reserves only one refund when competing processes would exceed ca
     $settings = $driver === 'sqlite'
         ? array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000])
         : array_replace(config('database.connections.pgsql'), ['host' => getenv('PAYMENTS_TEST_PG_HOST') ?: '127.0.0.1', 'port' => getenv('PAYMENTS_TEST_PG_PORT') ?: '5432', 'database' => getenv('PAYMENTS_TEST_PG_DATABASE'), 'username' => getenv('PAYMENTS_TEST_PG_USERNAME') ?: 'postgres', 'password' => getenv('PAYMENTS_TEST_PG_PASSWORD') ?: '']);
-    config(['database.connections.refund_race' => $settings, 'payments.connection' => 'refund_race']);
+    config(['database.connections.refund_race' => $settings, 'nvl-payments.connection' => 'refund_race']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     $attempt = createRefundAttempt();
@@ -100,7 +100,7 @@ it('atomically reserves only one refund when competing processes would exceed ca
         }
         $migration->down();
         DB::purge('refund_race');
-        config(['payments.connection' => null]);
+        config(['nvl-payments.connection' => null]);
         foreach (glob($directory.'/*') as $file) {
             unlink($file);
         }
