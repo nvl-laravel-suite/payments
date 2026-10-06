@@ -7,7 +7,11 @@ namespace Nvl\Payments\Contracts;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 
-/** Delegates operation-specific order payment authorization to the host. */
+/**
+ * Delegates operation-specific order payment authorization to the host.
+ *
+ * @api
+ */
 interface PaymentManagementAccess
 {
     /** Assert that the actor may perform the operation on the order. */

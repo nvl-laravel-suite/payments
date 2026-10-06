@@ -7,7 +7,11 @@ namespace Nvl\Payments\Actions;
 use Nvl\Payments\Services\PaymentReconciler;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
-/** Repairs one internal payment using authoritative Stripe reads. */
+/**
+ * Repairs one internal payment using authoritative Stripe reads.
+ *
+ * @internal
+ */
 final class ReconcilePaymentAction
 {
     /** Inject the reusable reconciliation write boundary. */

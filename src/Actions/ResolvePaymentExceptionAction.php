@@ -20,7 +20,11 @@ use Nvl\Payments\Services\PaymentProjection;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
-/** Accepts exception money explicitly through the primitive-input host contract without rewriting its original order revision. */
+/**
+ * Accepts exception money explicitly through the primitive-input host contract without rewriting its original order revision.
+ *
+ * @api
+ */
 final class ResolvePaymentExceptionAction
 {
     /** Inject host admission, authoritative financial facts, and durable acceptance auditing. */

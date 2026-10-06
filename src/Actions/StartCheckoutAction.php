@@ -24,6 +24,8 @@ use Throwable;
 /**
  * Reserves one hosted checkout for a trusted host order reference.
  * Local transactions bracket remote calls; the explicit primitive signature is the host contract.
+ *
+ * @api
  */
 final class StartCheckoutAction
 {

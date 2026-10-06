@@ -25,6 +25,8 @@ use Throwable;
  * Attaches a host-proven Stripe payment without creating or changing the host Order.
  * The primitive signature and snapshot return are the explicit standalone host contract.
  * Local transactions bracket the remote read and the host ownership proof.
+ *
+ * @api
  */
 final class AttachExistingPaymentAction
 {

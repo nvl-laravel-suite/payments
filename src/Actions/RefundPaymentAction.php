@@ -22,7 +22,11 @@ use Nvl\Payments\ValueObjects\RefundSnapshot;
 use Stripe\Exception\InvalidRequestException;
 use Throwable;
 
-/** Refunds an internal payment ID through the approved primitive-input and immutable-snapshot package contract. */
+/**
+ * Refunds an internal payment ID through the approved primitive-input and immutable-snapshot package contract.
+ *
+ * @api
+ */
 final class RefundPaymentAction
 {
     /** Inject trusted host admission, remote facts, and refund reservation boundaries. */

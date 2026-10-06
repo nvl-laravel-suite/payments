@@ -10,6 +10,8 @@ use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
 /** Coordinates a confirmed authorization operation through its durable shared boundary.
  * The explicit primitive signature is the host contract for internal attempt identifiers.
+ *
+ * @api
  */
 final class CapturePaymentAction
 {

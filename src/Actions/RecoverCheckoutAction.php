@@ -12,7 +12,11 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Services\PaymentReconciler;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
-/** Allows host-authorized recovery of a lost Checkout response with exact operation proof. */
+/**
+ * Allows host-authorized recovery of a lost Checkout response with exact operation proof.
+ *
+ * @api
+ */
 final class RecoverCheckoutAction
 {
     /** Inject host admission and the shared reconciliation boundary. */

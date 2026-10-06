@@ -11,7 +11,11 @@ use Nvl\Payments\ValueObjects\StripeCheckoutState;
 use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Payments\ValueObjects\StripeRefundState;
 
-/** Fakeable boundary for one-time Stripe order payments. */
+/**
+ * Fakeable boundary for one-time Stripe order payments.
+ *
+ * @api
+ */
 interface PaymentGateway
 {
     public function createCheckout(OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, CarbonImmutable $expiresAt, string $idempotencyKey): HostedCheckout;

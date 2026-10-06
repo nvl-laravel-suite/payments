@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\ValueObjects;
 
-/** Canonical Stripe payment facts read from the payment gateway. */
+/**
+ * Canonical Stripe payment facts read from the payment gateway.
+ *
+ * @api
+ */
 final readonly class StripePaymentState
 {
     /** Hold a resolved PaymentIntent or Charge and its financial state. */

@@ -15,6 +15,8 @@ use Stripe\Event;
 /**
  * Ingest verified events with remote reads outside the atomic local transition.
  * The verified Stripe event is the input contract; this boundary returns no host projection.
+ *
+ * @internal
  */
 final class ProcessPaymentsWebhookAction
 {

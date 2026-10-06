@@ -6,7 +6,11 @@ namespace Nvl\Payments\ValueObjects;
 
 use InvalidArgumentException;
 
-/** Immutable server-calculated payment facts for a host-owned order. */
+/**
+ * Immutable server-calculated payment facts for a host-owned order.
+ *
+ * @api
+ */
 final readonly class OrderPaymentSnapshot
 {
     /** Validate the order facts supplied by the host. */

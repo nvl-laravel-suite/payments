@@ -12,7 +12,11 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
 
-/** Returns authorized order timelines using two configured-connection queries. */
+/**
+ * Returns authorized order timelines using two configured-connection queries.
+ *
+ * @api
+ */
 final class PaymentReadService
 {
     /** Inject host order admission and immutable projection mapping. */

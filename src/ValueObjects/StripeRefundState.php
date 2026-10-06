@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\ValueObjects;
 
-/** Authoritative refund facts; pending is distinct from succeeded. */
+/**
+ * Authoritative refund facts; pending is distinct from succeeded.
+ *
+ * @api
+ */
 final readonly class StripeRefundState
 {
     public function __construct(

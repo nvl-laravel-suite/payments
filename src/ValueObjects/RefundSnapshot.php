@@ -6,7 +6,11 @@ namespace Nvl\Payments\ValueObjects;
 
 use Carbon\CarbonImmutable;
 
-/** Read-only local refund and its synchronized Stripe status. */
+/**
+ * Read-only local refund and its synchronized Stripe status.
+ *
+ * @api
+ */
 final readonly class RefundSnapshot
 {
     /** Hold local identity, amount, Stripe refund ID, and sync time. */

@@ -6,7 +6,11 @@ namespace Nvl\Payments\ValueObjects;
 
 use Carbon\CarbonImmutable;
 
-/** Authoritative Checkout facts, including trusted order correlation. */
+/**
+ * Authoritative Checkout facts, including trusted order correlation.
+ *
+ * @api
+ */
 final readonly class StripeCheckoutState
 {
     public function __construct(

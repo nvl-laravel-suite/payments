@@ -6,7 +6,11 @@ namespace Nvl\Payments\ValueObjects;
 
 use Carbon\CarbonImmutable;
 
-/** Read-only local payment attempt and its synchronized Stripe facts. */
+/**
+ * Read-only local payment attempt and its synchronized Stripe facts.
+ *
+ * @api
+ */
 final readonly class PaymentSnapshot
 {
     /** Hold local identity, financial state, Stripe references, and sync time. */

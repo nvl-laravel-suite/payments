@@ -6,7 +6,11 @@ namespace Nvl\Payments\Contracts;
 
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 
-/** Supplies a host-owned order's trusted payment facts. */
+/**
+ * Supplies a host-owned order's trusted payment facts.
+ *
+ * @api
+ */
 interface PaymentOrderProvider
 {
     /** Resolve a host order reference to its current server-calculated payment snapshot. */
