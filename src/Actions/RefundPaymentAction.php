@@ -13,6 +13,8 @@ use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Contracts\RefundPaymentContract;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
@@ -46,11 +48,17 @@ final class RefundPaymentAction implements RefundPaymentContract
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->access->assertCanManage($actor, 'refund', $order);
-        if (! config()->boolean('nvl-payments.enabled') || $order->reference !== $attempt->order_reference) {
-            throw new DomainException('Payments must be enabled for the requested order.');
+        if (! config()->boolean('nvl-payments.enabled')) {
+            throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
+        }
+        if ($order->reference !== $attempt->order_reference) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');
+        }
+        if ($amountMinor > $attempt->amount_minor) {
+            throw PaymentsException::because(PaymentsResponseCode::RefundBalanceExceeded, 'Refund exceeds the original payment amount.');
         }
         $actorId = $actor->getAuthIdentifier();
-        if ($amountMinor <= 0 || $amountMinor > $attempt->amount_minor || ! in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true)
+        if ($amountMinor <= 0 || ! in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true)
             || ! Str::isUuid($operationId) || (! is_string($actorId) && ! is_int($actorId)) || trim((string) $actorId) === '') {
             throw new InvalidArgumentException('A valid refund amount, reason, operation UUID, and stable actor are required.');
         }
@@ -78,7 +86,7 @@ final class RefundPaymentAction implements RefundPaymentContract
             }
             $this->syncer->assertMatches($current, $payment);
             if ($amountMinor > $this->balance->available($current, $payment, $refunds, $attempt->refunded_amount_minor)) {
-                throw new DomainException('Refund exceeds the available captured balance.');
+                throw PaymentsException::because(PaymentsResponseCode::RefundBalanceExceeded, 'Refund exceeds the available captured balance.');
             }
             $operation->update(['payment_attempt_id' => $current->id]);
             PaymentRefund::query()->create(['payment_attempt_id' => $current->id, 'payment_operation_id' => $operation->id,
@@ -129,7 +137,7 @@ final class RefundPaymentAction implements RefundPaymentContract
     private function replay(PaymentOperation $operation): RefundSnapshot
     {
         if (! in_array($operation->status, ['completed', 'failed'], true)) {
-            throw new DomainException('Refund operation is unresolved; reconcile before retrying.');
+            throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Refund operation is unresolved; reconcile before retrying.');
         }
 
         return $this->snapshot(PaymentRefund::query()->where('payment_operation_id', $operation->id)->sole());

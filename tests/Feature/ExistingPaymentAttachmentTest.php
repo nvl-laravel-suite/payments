@@ -23,6 +23,7 @@ use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 use Nvl\Payments\ValueObjects\StripePaymentState;
+use Nvl\Support\Exceptions\BindingRequiredException;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
 uses(PaymentsSchemaTestCase::class);
@@ -77,7 +78,7 @@ it('requires each host contract and never treats matching amount as ownership', 
     if ($contract === ExistingPaymentOwnership::class) {
         $this->gateway->shouldReceive('resolveExisting')->once()->andReturn(attachmentState());
     }
-    expect(fn () => attachPayment($this->uuid))->toThrow(AuthorizationException::class);
+    expect(fn () => attachPayment($this->uuid))->toThrow(BindingRequiredException::class);
     expect(PaymentAttempt::count())->toBe(0)->and(PaymentOperation::where('status', 'completed')->count())->toBe(0);
 })->with([[PaymentOrderProvider::class, DenyPaymentOrderProvider::class], [PaymentManagementAccess::class, DenyPaymentManagementAccess::class], [ExistingPaymentOwnership::class, DenyExistingPaymentOwnership::class]]);
 

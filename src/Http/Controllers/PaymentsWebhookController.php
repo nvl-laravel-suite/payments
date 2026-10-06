@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Http\Controllers;
 
-use DomainException;
 use Illuminate\Http\Request;
 use Nvl\Payments\Actions\ProcessPaymentsWebhookAction;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Stripe\Event;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -20,7 +20,7 @@ final class PaymentsWebhookController
         abort_unless($event instanceof Event, 400);
         try {
             $action->execute($event);
-        } catch (DomainException) {
+        } catch (PaymentsException) {
             abort(400, 'Payment correlation mismatch.');
         }
 

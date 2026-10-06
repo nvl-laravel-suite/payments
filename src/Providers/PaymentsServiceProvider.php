@@ -33,8 +33,11 @@ use Nvl\Payments\Services\DenyPaymentOrderProvider;
 use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Services\PaymentsDoctor;
 use Nvl\Payments\Services\StripePaymentGateway;
+use Nvl\Support\Bindings\RequiredBindingDefinition;
+use Nvl\Support\Bindings\RequiredBindings;
 use Nvl\Support\Doctor\DoctorCheck;
 use Nvl\Support\Doctor\PackageDoctorContributor;
+use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
 use Stripe\StripeClient;
@@ -75,11 +78,21 @@ final class PaymentsServiceProvider extends ServiceProvider
         $this->app->bindIf(PaymentOrderProvider::class, DenyPaymentOrderProvider::class);
         $this->app->bindIf(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
         $this->app->bindIf(ExistingPaymentOwnership::class, DenyExistingPaymentOwnership::class);
+        $this->callAfterResolving(RequiredBindings::class, static function (RequiredBindings $bindings): void {
+            $documentation = 'https://github.com/nvl-laravel-suite/payments#required-bindings';
+            $bindings->register(new RequiredBindingDefinition('payments', PaymentOrderProvider::class, DenyPaymentOrderProvider::class, 'order_resolution', 'nvl-payments.enabled', $documentation));
+            $bindings->register(new RequiredBindingDefinition('payments', PaymentManagementAccess::class, DenyPaymentManagementAccess::class, 'payment_management', 'nvl-payments.enabled', $documentation));
+            $bindings->register(new RequiredBindingDefinition('payments', ExistingPaymentOwnership::class, DenyExistingPaymentOwnership::class, 'existing_payment_attachment', 'nvl-payments.enabled', $documentation));
+        });
     }
 
     /** Publish resources and load vendor migrations only when explicitly enabled. */
     public function boot(): void
     {
+        $this->app->make(GlobalNames::class)->translations('payments', __DIR__.'/../../lang', $this->app->make('translation.loader'));
+        $this->publishes([
+            __DIR__.'/../../lang' => lang_path('vendor/nvl-payments'),
+        ], 'nvl-payments-translations');
         $this->commands([PaymentsDoctorCommand::class, PaymentsReconcileCommand::class]);
         $path = __DIR__.'/../../database/migrations/payments';
 

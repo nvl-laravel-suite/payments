@@ -1,5 +1,28 @@
 # NVL Payments — API and usage
 
+## Quickstart
+
+```sh
+composer require nvl/payments:^5.0
+php artisan nvl:install payments --dry-run
+php artisan nvl:install payments
+```
+
+Required NVL dependencies: `nvl/core` (`^5.0`). Bind PaymentOrderProvider, PaymentManagementAccess and ExistingPaymentOwnership before enabling Payments. Resolve prices and ownership from the server; configure the gateway separately.
+Review the published common config, select one migration owner, and run schema preflight before existing-table upgrades. The installer does not enable features or run migrations. Follow the detailed installation and capability sections below before invoking a storage/provider operation.
+
+Inject `Nvl\Payments\Contracts\PaymentReadContract` in a host service. After supplying the trusted inputs described above, the first public call is:
+
+```php
+use Nvl\Payments\Contracts\PaymentReadContract;
+
+/** @var PaymentReadContract $capability */
+$result = $capability->forOrder($orderReference, $actor);
+```
+
+Use the [event catalog](docs/events.md) and [Testing your app](#testing-your-app) below. The suite [getting-started guide](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/getting-started.md) provides a complete Comments host fixture; package archives retain their own local references.
+
+
 [← NVL Laravel Suite](https://github.com/nvl-laravel-suite)
 
 For support, [open an issue](https://github.com/nvl-laravel-suite/payments/issues). Report vulnerabilities through [private reporting](https://github.com/nvl-laravel-suite/payments/security/advisories/new). See [Contributing](CONTRIBUTING.md) and [Upgrading](UPGRADING.md).
@@ -26,6 +49,7 @@ After its first public mirror tag is indexed on Packagist, install the published
 
 ```bash
 composer require nvl/payments:^5.0
+php artisan vendor:publish --tag=nvl-payments-translations
 php artisan vendor:publish --tag=nvl-payments-config
 php artisan vendor:publish --tag=nvl-payments-skills
 ```
@@ -156,9 +180,41 @@ The source `@api` declarations identify supported workflows, extension contracts
 
 A package model returned or accepted by a public workflow is an identity/result handle. Use its declared type and `getKey()`, `getKeyName()`, `getMorphClass()`, `getRouteKey()`, `getRouteKeyName()`, `is()`, `isNot()`, and `relationLoaded()`. Read only explicitly declared in-memory `@nvl-consumer-read` fields; ordinary model PHPDocs and fillable attributes do not grant consumer reads. Obtain display projections through public reads. Persistence, additional model queries, relation access/loading, and generic model serialization are outside this contract. Host-model queries remain available, while traversal or aggregates of package capability relations require the package public reader or authorized adapter.
 
-## License
+## Testing your app
 
-MIT. See [LICENSE](LICENSE) and [SECURITY.md](SECURITY.md).
+Use `Nvl\Payments\Testing\FakePaymentGateway::fake($container)` to install a fresh `PaymentGateway` substitute before resolving host services or real package Actions. It implements the exact nine native gateway methods; the existing conditional provider default preserves a fake installed before discovery. A late installation reaches newly resolved services. Each installation owns separate scripts and call history, and requires the prepared Core major 5 runtime recorder.
+
+```php
+use Carbon\CarbonImmutable;
+use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Testing\FakePaymentGateway;
+use Nvl\Payments\ValueObjects\HostedCheckout;
+use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
+use Nvl\Support\Testing\FakeCall;
+
+$expiresAt = CarbonImmutable::parse('2030-01-01T12:00:00Z');
+$order = new OrderPaymentSnapshot('order-123', 'revision-1', 2500, 'USD', 'Order 123', null, true);
+$session = new HostedCheckout('cs_test_123', 'https://checkout.example/session', $expiresAt);
+$gateway = FakePaymentGateway::fake($this->app)
+    ->willReturn('createCheckout', $session)
+    ->willReturn('expireCheckout', null);
+
+$result = $this->app->make(PaymentGateway::class)->createCheckout(
+    $order, 'manual', 'https://shop.example/success', 'https://shop.example/cancel',
+    $expiresAt, 'checkout-operation-123',
+);
+$this->app->make(PaymentGateway::class)->expireCheckout('cs_test_123', 'expire-operation-123');
+
+expect($result)->toBe($session);
+$gateway->assertCalled('createCheckout', static fn (FakeCall $call): bool =>
+    $call->arguments['order'] === $order
+    && $call->arguments['idempotencyKey'] === 'checkout-operation-123',
+);
+```
+
+Script each invocation with `willReturn` or `willThrow`; responses are consumed FIFO per method. Use real declared HostedCheckout/Stripe state values and a `list<StripeRefundState>` for `refunds`. Capture/refund preserve integer `amountMinor`, exact `idempotencyKey`, and all native parameter names without normalization. Null is an explicit void script; result Closures remain inert. Wrong response types raise TypeError, unsupported names fail immediately, and exhaustion raises Core's UnscriptedFakeCall after recording the attempt. `calls()` returns immutable FakeCall records with named arguments; assertCalled predicates receive those records and exact non-negative counts, including zero.
+
+For a host-only orchestration test, inject `PaymentGateway` or substitute the focused workflow contracts described above. Prepare immutable values and native model handles in memory; model factories, when provided by the owning package, are only persistence fixtures. Guard both Laravel HTTP and Stripe's SDK transport, plus SQL/storage/queue effects, after setup. The fake itself does not call Stripe or persist payment facts. Real Payments Actions still write their reservations and lifecycle state even with a fake gateway; retain their schema, authorization, idempotency, reconciliation and Stripe test-mode coverage. Include `vendor/nvl/core/support/consumer-audit.neon` explicitly in host development PHPStan configuration; see [Core's configuration](https://github.com/nvl-laravel-suite/core#opt-in-phpstan-consumer-boundary).
 
 ## Shared consumer diagnostics
 
@@ -180,3 +236,114 @@ Migration filenames contain `nvl_payments_`. Existing installations must complet
 ## Canonical configuration ownership
 
 Use `nvl-payments` settings in `config/nvl-payments.php` and canonical package environment names. Old generic roots are foreign unless an upgrading NVL host explicitly selects them in Core's default-off compatibility. Canonical false/null/empty values win; no old roots are populated or written back. Keep logical package/resource IDs unchanged. Review [Core's rename inventory and cache/worker cutover](https://github.com/nvl-laravel-suite/core/blob/main/UPGRADING.md#major-5-canonical-configuration-and-environment).
+
+## Testing your app
+
+Inject the supported contract rather than constructing its concrete Action or querying package tables. Replace `Nvl\Payments\Contracts\PaymentReadContract` in Laravel's native container for a host-workflow test:
+
+```php
+use Nvl\Payments\Contracts\PaymentReadContract;
+
+$double = Mockery::mock(PaymentReadContract::class);
+$this->app->instance(PaymentReadContract::class, $double);
+// Configure the exact forOrder arguments and documented return value for your host case.
+```
+
+The package's conditional native binding preserves host substitutions. Production uses the real contract; test doubles do not prove its storage/authorization behavior.
+
+A detached fixture for a returned identity/data handle is:
+
+```php
+use Nvl\Payments\Models\PaymentAttempt;
+$fixture = PaymentAttempt::factory()->withoutParents()->make();
+```
+
+Ordinary `make()` may persist declared package parents. `withoutParents()->make()` disables parent expansion/admission for detached fixtures; use explicit persisted parents/owners and matching effective connections for a real `create()`. Factories do not authorize workflows, call Stripe, create backing Media objects or publish Template artifacts. Enabled tenancy requires explicit admitted persisted tenants/parents. Your host test installation supplies Faker; no test runner is a runtime package dependency.
+
+`Nvl\Payments\Testing\FakePaymentGateway::fake($this->app)` provides FIFO explicit gateway responses and call assertions without Stripe or local lifecycle writes. Native DTOs and void responses must be scripted.
+
+Use Laravel `Event::fake()`, `Queue::fake()`, `Mail::fake()` or `Storage::fake()` only for the effects the host test intends to isolate. Use real commits/listeners for timing proof. Add the optional Core consumer boundary rules to host PHPStan:
+
+```neon
+includes:
+    - vendor/nvl/core/support/consumer-audit.neon
+parameters:
+    nvlConsumer:
+        testPaths: [tests]
+        tableNames: []
+        exceptions: []
+```
+
+Rules read installed public metadata without suite boot. They flag internal symbols, package model queries/writes, capability relations and owned tables; they cannot prove dynamic code or runtime authorization. Exact exceptions require `file`, `identifier`, `symbol`, and a documented `reason`. New C3/C4/E tests, archives and guide execution remain pending until the integration phase records results.
+
+### Shipped factory states
+
+These runtime builders keep Laravel's native Factory API. The listed methods name explicit supported parent/owner/lifecycle states; follow each factory's native admission requirements. Detached examples above do not assert persistence validity.
+
+| Factory | Explicit states |
+| --- | --- |
+| [`PaymentAttemptFactory`](database/factories/PaymentAttemptFactory.php) | Native Factory states only |
+| [`PaymentOperationFactory`](database/factories/PaymentOperationFactory.php) | `forAttempt(PaymentAttempt $parent)` |
+| [`PaymentRefundFactory`](database/factories/PaymentRefundFactory.php) | `forOperation(PaymentOperation $parent)` |
+| [`PaymentWebhookEventFactory`](database/factories/PaymentWebhookEventFactory.php) | Native Factory states only |
+
+## Error codes and events
+
+All recognized package failures implement `Nvl\Support\Contracts\PackageException`; only `RespondableException` opts into safe response metadata. Keep native PHP programmer errors and Laravel/SDK exceptions distinct. The optional `PackageExceptionRenderer` is registered by the host in `withExceptions`; it leaves unrelated, marker-only and non-JSON handling to the host. Its JSON envelope is `{message:string, code:string, context:object}`. Request locale is host-owned; diagnostics/previous exceptions are not public copy. Event schemas and source connections are documented in [events](docs/events.md).
+
+The table lists enum discriminators, including any successful codes retained for compatibility. A code is not itself an HTTP status; the throwing exception's `suggestedStatus()` is authoritative, especially legacy/custom constructors. Empty context renders as `{}`; only documented JSON-safe context is presented.
+
+| Code | Suggested status | Public context | Translation key |
+| --- | --- | --- | --- |
+| `binding_required` | 500 | {} | `nvl-payments::responsecode.binding_required` |
+| `operation_failed` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.operation_failed` |
+| `feature_disabled` | 404 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.feature_disabled` |
+| `tenant_inactive` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.tenant_inactive` |
+| `checkout_conflict` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.checkout_conflict` |
+| `subscription_conflict` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.subscription_conflict` |
+| `provider_identity_mismatch` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.provider_identity_mismatch` |
+| `provider_payload_invalid` | 422 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.provider_payload_invalid` |
+| `operation_conflict` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.operation_conflict` |
+| `payment_state_invalid` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.payment_state_invalid` |
+| `refund_balance_exceeded` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.refund_balance_exceeded` |
+| `reconciliation_required` | 409 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.reconciliation_required` |
+| `invalid_configuration` | 500 | {} | `nvl-payments::responsecode.invalid_configuration` |
+| `storage_unavailable` | 500 | Declared safe scalar/array map; otherwise `{}` | `nvl-payments::responsecode.storage_unavailable` |
+
+
+
+## Required bindings
+
+The shipped placeholders fail closed with Core `binding_required`/500 before capability work. These are configuration failures; a configured adapter must preserve native authorization/not-found failures for actual user denial. Register your implementations in the host AppServiceProvider::register(), using these exact contracts. The `App` classes below are host adapters you implement, not package-provided defaults.
+
+```php
+use Nvl\Payments\Contracts\PaymentOrderProvider;
+use App\Payments\HostPaymentOrders;
+use Nvl\Payments\Contracts\PaymentManagementAccess;
+use App\Payments\HostPaymentAccess;
+use Nvl\Payments\Contracts\ExistingPaymentOwnership;
+use App\Payments\HostExistingPaymentOwnership;
+
+public function register(): void
+{
+    $this->app->bind(PaymentOrderProvider::class, HostPaymentOrders::class);
+    $this->app->bind(PaymentManagementAccess::class, HostPaymentAccess::class);
+    $this->app->bind(ExistingPaymentOwnership::class, HostExistingPaymentOwnership::class);
+}
+```
+
+| Host adapter contract | Required native signature |
+| --- | --- |
+| `PaymentOrderProvider` | `resolve(string $orderReference): OrderPaymentSnapshot` |
+| `PaymentManagementAccess` | `assertCanManage(Authenticatable $actor, string $operation, OrderPaymentSnapshot $order): void` |
+| `ExistingPaymentOwnership` | `assertOwned(OrderPaymentSnapshot $order, StripePaymentState $payment): void` |
+
+`Authenticatable` is Laravel’s contract and `Model` is Eloquent’s base. Use trusted persisted host identity; never return an arbitrary request-provided principal or infer ownership from a matching amount. DTOs/enums come from this package; `TenantId` comes from neutral Core Tenancy.
+
+`OrderPaymentSnapshot` takes `reference`, `revision`, `amountMinor`, `currency`, `label`, nullable `email`, and `payable`, calculated from host records. `ExistingPaymentOwnership` must verify a trusted stored provider-identity link against `StripePaymentState`; amount/currency similarity alone is insufficient. All three bindings are required when `nvl-payments.enabled=true`.
+
+Run `php artisan nvl:doctor --strict --format=json` after selecting the capability. RequiredBindings metadata inspection never executes your adapter factory or proves that a configured adapter authorizes correctly; retain host adapter integration tests.
+
+## License
+
+MIT. See [LICENSE](LICENSE) and [SECURITY.md](SECURITY.md).

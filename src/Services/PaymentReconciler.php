@@ -7,6 +7,8 @@ namespace Nvl\Payments\Services;
 use DomainException;
 use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
@@ -26,7 +28,10 @@ final class PaymentReconciler
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $connection = $attempt->getConnection();
-        if (! config()->boolean('nvl-payments.enabled') || $connection->transactionLevel() !== 0) {
+        if (! config()->boolean('nvl-payments.enabled')) {
+            throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
+        }
+        if ($connection->transactionLevel() !== 0) {
             throw new DomainException('Reconciliation requires enabled Payments outside a transaction.');
         }
         $observedRefunds = PaymentRefund::query()->where('payment_attempt_id', $attempt->id)->orderBy('id')->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
@@ -39,7 +44,7 @@ final class PaymentReconciler
         $payment = $reference === null ? null : $this->gateway->payment($reference);
         if ($payment !== null) {
             if ($reference !== $payment->paymentIntentId && $reference !== $payment->chargeId) {
-                throw new DomainException('Stripe returned a different payment.');
+                throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe returned a different payment.');
             }
             $this->syncer->assertMatches($attempt, $payment);
         }
@@ -47,11 +52,11 @@ final class PaymentReconciler
         $connection->transaction(function () use ($attempt, $checkout, $payment, $refunds, $recoverySessionId, $observedRefunds): void {
             $current = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
             if ($current->getRawOriginal() !== $attempt->getRawOriginal()) {
-                throw new DomainException('Payment changed during reconciliation; retry with fresh Stripe facts.');
+                throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Payment changed during reconciliation; retry with fresh Stripe facts.');
             }
             $currentRefunds = PaymentRefund::query()->where('payment_attempt_id', $attempt->id)->orderBy('id')->lockForUpdate()->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
             if ($currentRefunds !== $observedRefunds) {
-                throw new DomainException('Refunds changed during reconciliation; retry with fresh Stripe facts.');
+                throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Refunds changed during reconciliation; retry with fresh Stripe facts.');
             }
             if ($checkout !== null) {
                 $this->applyCheckout($current, $checkout, $recoverySessionId !== null);
@@ -84,7 +89,7 @@ final class PaymentReconciler
             || $checkout->orderReference !== $attempt->order_reference || $checkout->orderRevision !== $attempt->order_revision
             || $checkout->amountMinor !== $attempt->amount_minor || strtoupper($checkout->currency) !== strtoupper($attempt->currency)
             || ($attempt->stripe_payment_intent_id !== null && $checkout->paymentIntentId !== $attempt->stripe_payment_intent_id)) {
-            throw new DomainException('Checkout does not match its reserved payment.');
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Checkout does not match its reserved payment.');
         }
     }
 
@@ -94,7 +99,7 @@ final class PaymentReconciler
         if ($recovery) {
             $operation = PaymentOperation::query()->where('payment_attempt_id', $attempt->id)->where('type', 'checkout')->lockForUpdate()->sole();
             if ($checkout->operationKey === null || ! hash_equals($operation->idempotency_key, $checkout->operationKey)) {
-                throw new DomainException('Checkout recovery requires the original operation metadata.');
+                throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Checkout recovery requires the original operation metadata.');
             }
         }
         $attempt->fill(['stripe_checkout_session_id' => $checkout->sessionId, 'stripe_account_id' => $checkout->accountId, 'stripe_livemode' => $checkout->livemode, 'expires_at' => $checkout->expiresAt, 'last_synced_at' => now()]);
@@ -124,21 +129,21 @@ final class PaymentReconciler
         $seen = [];
         foreach ($refunds as $remote) {
             if (isset($seen[$remote->refundId])) {
-                throw new DomainException('Duplicate Stripe refund identity.');
+                throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Duplicate Stripe refund identity.');
             }
             $seen[$remote->refundId] = true;
             $local = PaymentRefund::query()->where('stripe_refund_id', $remote->refundId)->lockForUpdate()->first();
             if ($local !== null && $local->payment_attempt_id !== $attempt->id) {
-                throw new DomainException('Refund belongs to another payment.');
+                throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Refund belongs to another payment.');
             }
             if ($remote->operationKey !== null) {
                 $correlated = PaymentOperation::query()->where('idempotency_key', $remote->operationKey)->lockForUpdate()->first();
                 if ($correlated === null || $correlated->type !== 'refund' || $correlated->payment_attempt_id !== $attempt->id || $correlated->order_reference !== $attempt->order_reference) {
-                    throw new DomainException('Refund operation metadata does not match its payment.');
+                    throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Refund operation metadata does not match its payment.');
                 }
                 $reserved = PaymentRefund::query()->where('payment_operation_id', $correlated->id)->lockForUpdate()->sole();
                 if ($local !== null && $local->id !== $reserved->id) {
-                    throw new DomainException('Refund identity is already assigned to another reservation.');
+                    throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Refund identity is already assigned to another reservation.');
                 }
                 $local = $reserved;
             }
@@ -149,7 +154,7 @@ final class PaymentReconciler
                 $local = PaymentRefund::query()->create(['payment_attempt_id' => $attempt->id, 'payment_operation_id' => $operation->id, 'stripe_refund_id' => $remote->refundId, 'amount_minor' => $remote->amountMinor, 'currency' => strtoupper($remote->currency), 'reason' => $remote->reason, 'status' => $remote->status, 'last_synced_at' => now()]);
             } else {
                 if (in_array($local->status, ['failed', 'canceled'], true) && $local->status !== $remote->status) {
-                    throw new DomainException('A terminal refund changed unexpectedly.');
+                    throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'A terminal refund changed unexpectedly.');
                 }
                 $local->update(['stripe_refund_id' => $remote->refundId, 'status' => $remote->status, 'last_synced_at' => now()]);
                 $operation = PaymentOperation::query()->findOrFail($local->payment_operation_id);

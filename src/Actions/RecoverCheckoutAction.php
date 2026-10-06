@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Actions;
 
-use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Contracts\RecoverCheckoutContract;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Services\PaymentReconciler;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
@@ -29,8 +30,11 @@ final class RecoverCheckoutAction implements RecoverCheckoutContract
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->access->assertCanManage($actor, 'recover_checkout', $order);
-        if ($order->reference !== $attempt->order_reference || ! str_starts_with($stripeSessionId, 'cs_')) {
-            throw new DomainException('Invalid Checkout recovery identity.');
+        if ($order->reference !== $attempt->order_reference) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Invalid Checkout recovery order identity.');
+        }
+        if (! str_starts_with($stripeSessionId, 'cs_')) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Invalid Checkout recovery Session identity.');
         }
 
         return $this->reconciler->reconcile($attemptId, $stripeSessionId);

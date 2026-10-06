@@ -14,6 +14,8 @@ use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\PaymentOperationJournal;
@@ -46,9 +48,14 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
     {
         $order = $this->orders->resolve($orderReference);
         $this->access->assertCanManage($actor, 'attach_existing', $order);
-        if (! config()->boolean('nvl-payments.enabled') || $order->reference !== $orderReference
-            || ! in_array(strtoupper($order->currency), config()->array('nvl-payments.allowed_currencies'), true)) {
-            throw new DomainException('Payments must be enabled for the requested order and currency.');
+        if (! config()->boolean('nvl-payments.enabled')) {
+            throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
+        }
+        if ($order->reference !== $orderReference) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');
+        }
+        if (! in_array(strtoupper($order->currency), config()->array('nvl-payments.allowed_currencies'), true)) {
+            throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'The requested order currency is unavailable.');
         }
         $actorId = $actor->getAuthIdentifier();
         if ((! is_string($actorId) && ! is_int($actorId)) || trim((string) $actorId) === ''
@@ -65,7 +72,7 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
         ), 5);
         if (! $operation->wasRecentlyCreated) {
             if ($operation->status !== 'completed' || $operation->payment_attempt_id === null) {
-                throw new DomainException('Attachment is unresolved; reconcile before retrying.');
+                throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Attachment is unresolved; reconcile before retrying.');
             }
 
             return $this->snapshot(PaymentAttempt::query()->findOrFail($operation->payment_attempt_id));
@@ -84,7 +91,7 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
             $connection->transaction(function () use ($attempt, $operation, $payment): void {
                 $current = PaymentOperation::query()->lockForUpdate()->findOrFail($operation->id);
                 if ($current->status !== 'reserved') {
-                    throw new DomainException('Attachment operation changed while resolving Stripe.');
+                    throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Attachment operation changed while resolving Stripe.');
                 }
                 $duplicate = PaymentAttempt::query()->where(function ($query) use ($payment): void {
                     if ($payment->paymentIntentId !== null) {
@@ -95,7 +102,7 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
                     }
                 })->exists();
                 if ($duplicate) {
-                    throw new DomainException('This canonical Stripe payment is already attached.');
+                    throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'This canonical Stripe payment is already attached.');
                 }
                 $attempt->save();
                 $current->update(['payment_attempt_id' => $attempt->id]);
@@ -106,7 +113,7 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
             return $this->snapshot($attempt->refresh());
         } catch (UniqueConstraintViolationException $exception) {
             $this->journal->markUnknown($operation);
-            throw new DomainException('This canonical Stripe payment was attached concurrently.', previous: $exception);
+            throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'This canonical Stripe payment was attached concurrently.', previous: $exception);
         } catch (Throwable $exception) {
             $this->journal->markUnknown($operation);
             throw $exception;
@@ -121,7 +128,7 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
             || ($payment->chargeId !== null && preg_match('/^ch_[A-Za-z0-9]+$/D', $payment->chargeId) !== 1)
             || (str_starts_with($reference, 'pi_') && $payment->paymentIntentId !== $reference)
             || ! in_array($payment->status, ['succeeded', 'requires_capture', 'processing', 'requires_payment_method', 'failed', 'canceled', 'requires_action', 'requires_confirmation'], true)) {
-            throw new DomainException('Stripe did not resolve a supported canonical payment.');
+            throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Stripe did not resolve a supported canonical payment.');
         }
     }
 

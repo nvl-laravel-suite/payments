@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Nvl\Support\Config\PackageEnvironment;
 
+/** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
     'enabled' => false,
     'connection' => null,

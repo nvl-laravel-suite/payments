@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Services;
 
-use DomainException;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
+use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Events\PaymentStateChanged;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Payments\ValueObjects\StripeRefundState;
+use Nvl\Support\Events\DomainEventDispatcher;
 
 /** Reusable transactional write boundary for authoritative Stripe financial facts. */
 final class PaymentStateSyncer
 {
+    /** Retain the source-aware domain event dispatcher. */
+    public function __construct(private DomainEventDispatcher $domainEvents) {}
+
     /** Synchronize only a previously correlated payment and notify after its connection commits. */
     public function sync(StripePaymentState $payment): void
     {
@@ -83,7 +88,7 @@ final class PaymentStateSyncer
             $attempt->save();
             if ($changed) {
                 $event = new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, $state, $payment->paymentIntentId, $payment->chargeId, $attempt->stripe_checkout_session_id);
-                $connection->afterCommit(static fn () => Event::dispatch($event));
+                $this->domainEvents->dispatch($event, $connection);
             }
         });
     }
@@ -100,7 +105,7 @@ final class PaymentStateSyncer
             || $attempt->amount_minor !== $payment->amountMinor || strtolower($attempt->currency) !== strtolower($payment->currency)
             || $payment->capturedAmountMinor < 0 || $payment->capturedAmountMinor > $payment->amountMinor
             || $payment->refundedAmountMinor < 0 || $payment->refundedAmountMinor > $payment->capturedAmountMinor) {
-            throw new DomainException('Stripe payment does not match the reserved attempt.');
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe payment does not match the reserved attempt.');
         }
     }
 

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Services;
 
-use DomainException;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\ValueObjects\StripePaymentState;
@@ -21,14 +22,14 @@ final class RefundBalance
     public function available(PaymentAttempt $attempt, StripePaymentState $payment, array $refunds, int $observedRefundedMinor): int
     {
         if ($payment->status !== 'succeeded' || $payment->capturedAmountMinor <= 0) {
-            throw new DomainException('Only a confirmed captured payment is refundable.');
+            throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Only a confirmed captured payment is refundable.');
         }
         $remote = [];
         $remoteReserved = 0;
         foreach ($refunds as $refund) {
             $this->assertMatches($attempt, $refund);
             if (isset($remote[$refund->refundId])) {
-                throw new DomainException('Duplicate Stripe refund identity.');
+                throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Duplicate Stripe refund identity.');
             }
             $remote[$refund->refundId] = $refund;
             if (! in_array($refund->status, ['failed', 'canceled'], true)) {
@@ -69,7 +70,7 @@ final class RefundBalance
             || ! in_array($refund->status, ['pending', 'requires_action', 'succeeded', 'failed', 'canceled'], true)
             || ($local !== null && ($refund->amountMinor !== $local->amount_minor || $refund->reason !== $local->reason
                 || ($local->stripe_refund_id !== null && $local->stripe_refund_id !== $refund->refundId)))) {
-            throw new DomainException('Stripe refund does not match the reserved payment and refund.');
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe refund does not match the reserved payment and refund.');
         }
     }
 }

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Str;
 use Nvl\Payments\Actions\CancelAuthorizationAction;
@@ -10,6 +9,7 @@ use Nvl\Payments\Actions\CapturePaymentAction;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
@@ -17,6 +17,7 @@ use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 use Nvl\Payments\ValueObjects\StripePaymentState;
+use Nvl\Support\Exceptions\BindingRequiredException;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
 uses(PaymentsSchemaTestCase::class);
@@ -77,7 +78,7 @@ it('cancels an authorization and releases its checkout reservation', function ()
 
 it('denies financial operations by default before writes or remote access', function (string $kind): void {
     app()->instance(PaymentManagementAccess::class, new DenyPaymentManagementAccess);
-    expect(fn () => authorizationOperation($kind, $this->attempt->id, $this->uuid))->toThrow(AuthorizationException::class);
+    expect(fn () => authorizationOperation($kind, $this->attempt->id, $this->uuid))->toThrow(BindingRequiredException::class);
     expect(PaymentOperation::count())->toBe(0);
 })->with(['capture', 'cancel_authorization']);
 
@@ -140,14 +141,20 @@ it('rejects unsupported or incomplete remote authorization facts', function (?in
 it('keeps an unexpected remote mutation result unresolved', function (string $kind): void {
     $this->gateway->shouldReceive('payment')->once()->andReturn(authorizationState());
     $this->gateway->shouldReceive($kind === 'capture' ? 'capture' : 'cancel')->once()->andReturn(authorizationState());
-    expect(fn () => authorizationOperation($kind, $this->attempt->id, $this->uuid))->toThrow(DomainException::class);
+    expect(fn () => authorizationOperation($kind, $this->attempt->id, $this->uuid))->toThrow(function (PaymentsException $failure): void {
+        expect($failure)->toBeInstanceOf(DomainException::class)
+            ->and($failure->responseCode())->toBe('reconciliation_required')->and($failure->suggestedStatus())->toBe(409);
+    });
     expect(PaymentOperation::sole()->status)->toBe('unknown')->and($this->attempt->refresh()->captured_amount_minor)->toBe(0);
 })->with(['capture', 'cancel_authorization']);
 
 it('rejects missing PaymentIntent identity and disabled Payments before remote access', function (bool $enabled, ?string $intent): void {
     config(['nvl-payments.enabled' => $enabled]);
     $this->attempt->update(['stripe_payment_intent_id' => $intent]);
-    expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(DomainException::class);
+    expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(function (PaymentsException $failure) use ($enabled): void {
+        expect($failure)->toBeInstanceOf(DomainException::class)
+            ->and($failure->responseCode())->toBe($enabled ? 'payment_state_invalid' : 'feature_disabled')->and($failure->suggestedStatus())->toBe($enabled ? 409 : 404);
+    });
     expect(PaymentOperation::count())->toBe(0);
 })->with([[false, 'pi_auth'], [true, null], [true, 'ch_auth']]);
 
@@ -164,7 +171,10 @@ it('rejects an outer transaction before reserving or calling Stripe', function (
 
 it('rejects mismatched Stripe identity before a financial mutation', function (): void {
     $this->gateway->shouldReceive('payment')->once()->andReturn(new StripePaymentState('pi_other', 'ch_auth', 'acct_test', false, 1200, 0, 0, 'eur', 'requires_capture', 'manual', 1200, 'card'));
-    expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(DomainException::class);
+    expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(function (PaymentsException $failure): void {
+        expect($failure)->toBeInstanceOf(DomainException::class)
+            ->and($failure->responseCode())->toBe('provider_identity_mismatch')->and($failure->suggestedStatus())->toBe(409);
+    });
     expect(PaymentOperation::sole()->status)->toBe('unknown');
 });
 

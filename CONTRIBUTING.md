@@ -1,5 +1,5 @@
 # Contributing
 
-This public repository is a publication mirror of private source. [Open an issue](https://github.com/nvl-laravel-suite/payments/issues) with a reproduction or proposal. Maintainers apply accepted changes in source and publish a mirror release; direct mirror pull requests do not update source. See the [organization contribution guide](https://github.com/nvl-laravel-suite/.github/blob/main/CONTRIBUTING.md).
+This repository is a read-only release mirror. Pull requests to the mirror are not accepted. Open a public issue with a reproducible example or a proposed patch. Maintainers apply reviewed changes in the private source repository and publish immutable releases from there.
 
-Preserve host-owned order facts, default-deny authorization, Stripe signature verification, idempotent financial operations, and conservative recovery. Add focused Pest tests and run Pint, PHPStan, package tests, and package-family validation before proposing a release.
+Report vulnerabilities privately through the [security policy](https://github.com/nvl-laravel-suite/payments/security/policy). Public issues must not contain undisclosed vulnerability details.

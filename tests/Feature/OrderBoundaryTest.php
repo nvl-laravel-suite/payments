@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
 use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
@@ -10,6 +9,7 @@ use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Tests\PaymentsTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Payments\ValueObjects\StripePaymentState;
+use Nvl\Support\Exceptions\BindingRequiredException;
 
 uses(PaymentsTestCase::class);
 
@@ -31,9 +31,9 @@ it('denies order resolution and management without host bindings', function (): 
     $actor = new GenericUser(['id' => 'admin-1']);
 
     expect(fn () => app(PaymentOrderProvider::class)->resolve($order->reference))
-        ->toThrow(AuthorizationException::class);
+        ->toThrow(BindingRequiredException::class);
     expect(fn () => app(PaymentManagementAccess::class)->assertCanManage($actor, 'refund', $order))
-        ->toThrow(AuthorizationException::class);
+        ->toThrow(BindingRequiredException::class);
 });
 
 it('denies imported payment ownership without a host binding', function (): void {
@@ -44,7 +44,7 @@ it('denies imported payment ownership without a host binding', function (): void
     );
 
     expect(fn () => app(ExistingPaymentOwnership::class)->assertOwned(paymentOrderSnapshot(), $payment))
-        ->toThrow(AuthorizationException::class);
+        ->toThrow(BindingRequiredException::class);
 });
 
 it('keeps server minor units unchanged and allows nonpayable snapshots for reads', function (): void {

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Services;
 
-use DomainException;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentOperation;
 
 /**
@@ -33,7 +34,7 @@ final class PaymentOperationJournal
         ]);
 
         if (! hash_equals($operation->input_fingerprint, $canonical)) {
-            throw new DomainException('Operation UUID was already reserved with different inputs.');
+            throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Operation UUID was already reserved with different inputs.');
         }
 
         return $operation;
@@ -50,13 +51,13 @@ final class PaymentOperationJournal
             $current = PaymentOperation::query()->lockForUpdate()->findOrFail($operation->id);
             if ($current->status === 'completed') {
                 if ($current->stripe_result_reference !== $resultReference) {
-                    throw new DomainException('Operation already completed with another result.');
+                    throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Operation already completed with another result.');
                 }
 
                 return $current;
             }
             if (! in_array($current->status, ['reserved', 'unknown'], true)) {
-                throw new DomainException('Operation cannot be completed from its current status.');
+                throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Operation cannot be completed from its current status.');
             }
             $current->update(['status' => 'completed', 'stripe_result_reference' => $resultReference, 'stripe_request_reference' => $requestReference, 'resolved_at' => now()]);
 

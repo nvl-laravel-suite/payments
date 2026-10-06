@@ -11,6 +11,8 @@ use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
@@ -38,8 +40,11 @@ final class AuthorizationOperations
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->access->assertCanManage($actor, $kind, $order);
-        if (! config()->boolean('nvl-payments.enabled') || $order->reference !== $attempt->order_reference) {
-            throw new DomainException('Payments must be enabled for the requested order.');
+        if (! config()->boolean('nvl-payments.enabled')) {
+            throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
+        }
+        if ($order->reference !== $attempt->order_reference) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');
         }
         if (! in_array($kind, ['capture', 'cancel_authorization'], true)
             || ($kind === 'capture' && ($amountMinor === null || $amountMinor <= 0 || $amountMinor > $attempt->amount_minor))
@@ -59,17 +64,17 @@ final class AuthorizationOperations
             $operation = $this->journal->reserve($kind, $current->order_reference, $operationId, (string) $actorId, $current->id, $amountMinor);
             if (! $operation->wasRecentlyCreated) {
                 if ($operation->status !== 'completed') {
-                    throw new DomainException('Authorization operation is unresolved; reconcile before retrying.');
+                    throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Authorization operation is unresolved; reconcile before retrying.');
                 }
 
                 return $operation;
             }
             if ($current->state !== 'authorized' || $current->capture_method !== 'manual' || $current->captured_amount_minor !== 0
                 || $current->stripe_payment_intent_id === null || ! str_starts_with($current->stripe_payment_intent_id, 'pi_')) {
-                throw new DomainException('Attempt is not an available PaymentIntent authorization.');
+                throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Attempt is not an available PaymentIntent authorization.');
             }
             if (PaymentOperation::query()->where('payment_attempt_id', $current->id)->whereIn('type', ['capture', 'cancel_authorization'])->whereIn('status', ['reserved', 'unknown'])->exists()) {
-                throw new DomainException('Another authorization operation requires reconciliation.');
+                throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Another authorization operation requires reconciliation.');
             }
             $operation->update(['payment_attempt_id' => $current->id]);
 
@@ -89,7 +94,7 @@ final class AuthorizationOperations
             $this->syncer->assertMatches($attempt, $result);
             if (($kind === 'capture' && ($result->status !== 'succeeded' || $result->capturedAmountMinor !== $amountMinor || $result->amountCapturableMinor !== 0))
                 || ($kind === 'cancel_authorization' && ($result->status !== 'canceled' || $result->capturedAmountMinor !== 0 || $result->amountCapturableMinor !== 0))) {
-                throw new DomainException('Stripe did not confirm the requested final authorization operation.');
+                throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Stripe did not confirm the requested final authorization operation.');
             }
             $connection->transaction(function () use ($result, $operation, $intentId): void {
                 $this->syncer->sync($result);
@@ -109,7 +114,7 @@ final class AuthorizationOperations
         if ($payment->status !== 'requires_capture' || $payment->captureMethod !== 'manual' || $payment->paymentMethodType !== 'card'
             || $payment->capturedAmountMinor !== 0 || $payment->refundedAmountMinor !== 0 || $payment->amountCapturableMinor !== $payment->amountMinor
             || ($payment->partialAuthorizationStatus !== null && ! in_array($payment->partialAuthorizationStatus, ['fully_authorized', 'not_requested'], true))) {
-            throw new DomainException('Stripe authorization is not supported or no longer available.');
+            throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Stripe authorization is not supported or no longer available.');
         }
     }
 

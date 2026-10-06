@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Services;
 
-use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Contracts\PaymentReadContract;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
@@ -29,7 +30,7 @@ final class PaymentReadService implements PaymentReadContract
         $order = $this->orders->resolve($orderReference);
         $this->access->assertCanManage($actor, 'view', $order);
         if ($order->reference !== $orderReference) {
-            throw new DomainException('Order provider returned a different order.');
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');
         }
         $attempts = PaymentAttempt::query()->where('order_reference', $orderReference)->orderBy('created_at')->orderBy('id')->get();
         $refunds = PaymentRefund::query()->whereIn('payment_attempt_id', PaymentAttempt::query()->select('id')->where('order_reference', $orderReference))->orderBy('created_at')->orderBy('id')->get();

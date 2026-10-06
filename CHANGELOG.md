@@ -1,10 +1,19 @@
 # Changelog
 
+## Unreleased — consumer runtime integration
+
+- Added focused consumer contract/testing guidance and shipped-factory usage limits.
+- Versioned committed event payloads and documented canonical aliases, source connections, failure metadata and optional safe rendering.
+- Added explicit first-use/installer and deployment guidance; new acceptance checks remain pending.
+
+
 All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
 ### Added
+
+- Add a runtime FakePaymentGateway with exact native methods, instance-owned FIFO scripting, immutable named call records and explicit container installation; no Stripe or persistence execution occurs in the fake.
 
 - Add seven focused management Action contracts and `PaymentReadContract` for constructor injection and host workflow substitution, with transient conditional defaults that preserve host bindings and existing concrete APIs.
 

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Actions;
 
-use DomainException;
 use Illuminate\Support\Facades\Config;
 use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Enums\PaymentsResponseCode;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Services\PaymentStateSyncer;
@@ -57,11 +58,11 @@ final class ProcessPaymentsWebhookAction
                     || $checkout->livemode !== Config::get('nvl-payments.stripe.livemode')
                     || ($locked->stripe_account_id !== null && $checkout->accountId !== $locked->stripe_account_id)
                     || ($locked->stripe_livemode !== null && $checkout->livemode !== $locked->stripe_livemode))) {
-                    throw new DomainException('Checkout does not match the reserved attempt.');
+                    throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Checkout does not match the reserved attempt.');
                 }
                 if ($payment !== null) {
                     if ($reference !== $payment->paymentIntentId && $reference !== $payment->chargeId) {
-                        throw new DomainException('Stripe returned a different payment.');
+                        throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe returned a different payment.');
                     }
                     $this->syncer->assertMatches($locked, $payment);
                     if ($checkout !== null && $locked->stripe_payment_intent_id === null) {

@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "package": "nvl/payments",
+  "documentation": "docs/events.md",
+  "implementation_status": "implemented; executable acceptance proof pending",
+  "events": [
+    {
+      "class": "Nvl\\Payments\\Events\\PaymentStateChanged",
+      "source": "packages/nvl/payments/src/Events/PaymentStateChanged.php",
+      "constructor_fields": [
+        {
+          "name": "orderReference",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "attemptId",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "oldState",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "newState",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "paymentIntentId",
+          "type": "?string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "chargeId",
+          "type": "?string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "checkoutSessionId",
+          "type": "?string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "orderReference",
+          "type": "string"
+        },
+        {
+          "name": "attemptId",
+          "type": "string"
+        },
+        {
+          "name": "oldState",
+          "type": "string"
+        },
+        {
+          "name": "newState",
+          "type": "string"
+        },
+        {
+          "name": "paymentIntentId",
+          "type": "?string"
+        },
+        {
+          "name": "chargeId",
+          "type": "?string"
+        },
+        {
+          "name": "checkoutSessionId",
+          "type": "?string"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Order payment financial facts changed.",
+      "aliases": [],
+      "producers": [
+        {
+          "path": "packages/nvl/payments/src/Actions/ResolvePaymentExceptionAction.php",
+          "trigger": "Order payment financial facts changed.",
+          "connection": "$connection = $attempt->getConnection()",
+          "construction_expression": "new PaymentStateChanged($current->order_reference, $current->id, 'payment_exception', $state, $current->stripe_payment_intent_id, $current->stripe_charge_id, $current->stripe_checkout_session_id)"
+        },
+        {
+          "path": "packages/nvl/payments/src/Services/PaymentStateSyncer.php",
+          "trigger": "Order payment financial facts changed.",
+          "connection": "$connection = (new PaymentAttempt)->getConnection()",
+          "construction_expression": "new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, $state, $payment->paymentIntentId, $payment->chargeId, $attempt->stripe_checkout_session_id)"
+        }
+      ],
+      "security_notes": [
+        "Host order reference, payment attempt/state and canonical Stripe references only. No customer data, raw provider payload, card details or payment exception object."
+      ],
+      "no_op_semantics": "PaymentStateSyncer emits only changed financial state/facts; ResolvePaymentExceptionAction publishes the successful explicit resolution. Matching webhook/reconcile observations retain native state guards."
+    }
+  ],
+  "value_types": [],
+  "aliases": [],
+  "publication": {
+    "publication": "The native host dispatcher receives the captured event after the supplied source connection outer commit, or immediately when that connection has no active transaction.",
+    "rollback": "Callbacks attach to the matching native connection and current nesting record; native outer/savepoint rollback discards the corresponding callbacks.",
+    "registration_failure": "Missing source transaction records fail before commit; Mail Notifications reports and drops unusable observations.",
+    "host_policy": "Host after-commit listeners and queue after_commit policies can add their own deferral after publication. Host transaction infrastructure and dispatcher bindings are preserved.",
+    "delivery_limit": "Local callbacks are not an outbox. Process exit between commit and callback can lose delivery; no crash durability or exactly-once delivery is promised.",
+    "cardinality": "One canonical object is dispatched per qualifying producer call. This is local publication, not cross-process deduplication or a guarantee that repeated observations are unique.",
+    "manual_producers": "Use Nvl\\Support\\Events\\DomainEventDispatcher::dispatch($event, $writerConnection). Native Event::dispatch() is immediate and has no package interception."
+  },
+  "security_notes": [
+    "Host order reference, payment attempt/state and canonical Stripe references only. No customer data, raw provider payload, card details or payment exception object."
+  ],
+  "no_op_semantics": "PaymentStateSyncer emits only changed financial state/facts; ResolvePaymentExceptionAction publishes the successful explicit resolution. Matching webhook/reconcile observations retain native state guards.",
+  "notes": []
+}

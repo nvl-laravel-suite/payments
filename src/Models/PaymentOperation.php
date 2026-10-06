@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Nvl\Payments\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Nvl\Payments\Database\Factories\PaymentOperationFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
 use Nvl\Support\Config\PackageStorage;
@@ -27,9 +29,16 @@ use Nvl\Support\Config\PackageStorage;
  * @property Carbon|null $resolved_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ *
+ * @api
+ *
+ * @nvl-consumer-read id
  */
 final class PaymentOperation extends Model
 {
+    /** @use HasFactory<PaymentOperationFactory> */
+    use HasFactory;
+
     use HasUuids;
     use UsesPaymentsConnection;
 
@@ -60,5 +69,15 @@ final class PaymentOperation extends Model
     public function getConnectionName(): ?string
     {
         return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('payments') ?? parent::getConnectionName());
+    }
+
+    /**
+     * Return the package's runtime fixture factory.
+     *
+     * @internal
+     */
+    protected static function newFactory(): PaymentOperationFactory
+    {
+        return PaymentOperationFactory::new();
     }
 }

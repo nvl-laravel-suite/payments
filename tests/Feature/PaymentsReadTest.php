@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
@@ -10,6 +9,7 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
+use Nvl\Support\Exceptions\BindingRequiredException;
 
 require_once __DIR__.'/../ReconciliationTestCase.php';
 uses(PaymentsSchemaTestCase::class);
@@ -20,7 +20,7 @@ beforeEach(function (): void {
 
 it('denies reading by default', function (): void {
     app()->bind(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
-    expect(fn () => app(PaymentReadService::class)->forOrder('order-1', new GenericUser(['id' => 'admin'])))->toThrow(AuthorizationException::class);
+    expect(fn () => app(PaymentReadService::class)->forOrder('order-1', new GenericUser(['id' => 'admin'])))->toThrow(BindingRequiredException::class);
 });
 
 it('reads conservative balances using a fixed number of queries', function (int $count): void {

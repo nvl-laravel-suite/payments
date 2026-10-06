@@ -2,18 +2,19 @@
 
 declare(strict_types=1);
 
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Nvl\Payments\Actions\ReconcilePaymentAction;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Payments\ValueObjects\StripeRefundState;
+use Nvl\Support\Exceptions\BindingRequiredException;
 use Stripe\Exception\InvalidRequestException;
 
 require_once __DIR__.'/../RefundTestCase.php';
@@ -94,11 +95,22 @@ it('rejects changed immutable UUID inputs', function (int $amount, string $reaso
 it('rejects nonpositive amounts and unsupported reasons before remote access', function (int $amount, string $reason): void {
     expect(fn () => refundPayment($amount, reason: $reason))->toThrow(InvalidArgumentException::class);
     expect(PaymentOperation::count())->toBe(0);
-})->with([[0, 'duplicate'], [-1, 'duplicate'], [1201, 'duplicate'], [700, 'arbitrary']]);
+})->with([[0, 'duplicate'], [-1, 'duplicate'], [700, 'arbitrary']]);
+
+it('classifies refunds exceeding the original balance before remote access', function (): void {
+    try {
+        refundPayment(1201, reason: 'duplicate');
+        $this->fail('Expected a classified refund balance failure.');
+    } catch (PaymentsException $exception) {
+        expect($exception->responseCode())->toBe('refund_balance_exceeded')
+            ->and($exception->suggestedStatus())->toBe(422);
+    }
+    expect(PaymentOperation::count())->toBe(0);
+});
 
 it('retains default deny authorization', function (): void {
     app()->instance(PaymentManagementAccess::class, new DenyPaymentManagementAccess);
-    expect(fn () => refundPayment())->toThrow(AuthorizationException::class);
+    expect(fn () => refundPayment())->toThrow(BindingRequiredException::class);
     expect(PaymentOperation::count())->toBe(0);
 });
 

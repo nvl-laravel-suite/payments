@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -23,6 +22,7 @@ use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\StripeCheckoutState;
 use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Payments\ValueObjects\StripeRefundState;
+use Nvl\Support\Exceptions\BindingRequiredException;
 use Stripe\Event as StripeEvent;
 
 require_once __DIR__.'/../ReconciliationTestCase.php';
@@ -157,7 +157,7 @@ it('rejects uncorrelated Dashboard refund facts atomically', function (): void {
 
 it('requires recovery authorization before any Stripe lookup', function (): void {
     app()->bind(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
-    expect(fn () => app(RecoverCheckoutAction::class)->execute($this->attempt->id, 'cs_recovery', new GenericUser(['id' => 'admin'])))->toThrow(AuthorizationException::class);
+    expect(fn () => app(RecoverCheckoutAction::class)->execute($this->attempt->id, 'cs_recovery', new GenericUser(['id' => 'admin'])))->toThrow(BindingRequiredException::class);
 });
 
 it('recovers a paid or expired Session with exact operation proof', function (string $status): void {
@@ -255,7 +255,7 @@ it('keeps financially confirmed exception facts visible without accepting the or
 it('requires explicit host admission to accept an exception', function (): void {
     app()->bind(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
     $this->attempt->update(['state' => 'payment_exception']);
-    expect(fn () => app(ResolvePaymentExceptionAction::class)->execute($this->attempt->id, new GenericUser(['id' => 'admin']), (string) Str::uuid()))->toThrow(AuthorizationException::class);
+    expect(fn () => app(ResolvePaymentExceptionAction::class)->execute($this->attempt->id, new GenericUser(['id' => 'admin']), (string) Str::uuid()))->toThrow(BindingRequiredException::class);
     expect(PaymentOperation::count())->toBe(0);
 });
 
