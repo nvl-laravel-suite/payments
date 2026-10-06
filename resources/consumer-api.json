@@ -1,0 +1,298 @@
+{
+    "schema_version": 1,
+    "package": "nvl/payments",
+    "psr4": {
+        "Nvl\\Payments\\": "src"
+    },
+    "symbols": {
+        "Nvl\\Payments\\Actions\\AttachExistingPaymentAction": {
+            "kind": "class",
+            "file": "src/Actions/AttachExistingPaymentAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Actions\\CancelAuthorizationAction": {
+            "kind": "class",
+            "file": "src/Actions/CancelAuthorizationAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Actions\\CapturePaymentAction": {
+            "kind": "class",
+            "file": "src/Actions/CapturePaymentAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Actions\\RecoverCheckoutAction": {
+            "kind": "class",
+            "file": "src/Actions/RecoverCheckoutAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Actions\\RefundPaymentAction": {
+            "kind": "class",
+            "file": "src/Actions/RefundPaymentAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Actions\\ResolvePaymentExceptionAction": {
+            "kind": "class",
+            "file": "src/Actions/ResolvePaymentExceptionAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Actions\\StartCheckoutAction": {
+            "kind": "class",
+            "file": "src/Actions/StartCheckoutAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\ExistingPaymentOwnership": {
+            "kind": "interface",
+            "file": "src/Contracts/ExistingPaymentOwnership.php",
+            "methods": [
+                "assertOwned"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\PaymentGateway": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentGateway.php",
+            "methods": [
+                "cancel",
+                "capture",
+                "checkout",
+                "createCheckout",
+                "expireCheckout",
+                "payment",
+                "refund",
+                "refunds",
+                "resolveExisting"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\PaymentManagementAccess": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentManagementAccess.php",
+            "methods": [
+                "assertCanManage"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\PaymentOrderProvider": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentOrderProvider.php",
+            "methods": [
+                "resolve"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Services\\PaymentReadService": {
+            "kind": "class",
+            "file": "src/Services/PaymentReadService.php",
+            "methods": [
+                "__construct",
+                "forOrder"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\HostedCheckout": {
+            "kind": "class",
+            "file": "src/ValueObjects/HostedCheckout.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "expiresAt",
+                "sessionId",
+                "url"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\OrderPaymentSnapshot": {
+            "kind": "class",
+            "file": "src/ValueObjects/OrderPaymentSnapshot.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "amountMinor",
+                "currency",
+                "email",
+                "label",
+                "payable",
+                "reference",
+                "revision"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\OrderPaymentTimeline": {
+            "kind": "class",
+            "file": "src/ValueObjects/OrderPaymentTimeline.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "orderReference",
+                "payments",
+                "refunds"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\PaymentSnapshot": {
+            "kind": "class",
+            "file": "src/ValueObjects/PaymentSnapshot.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "accountId",
+                "amountMinor",
+                "attemptId",
+                "captureMethod",
+                "capturedAmountMinor",
+                "chargeId",
+                "checkoutSessionId",
+                "currency",
+                "expiresAt",
+                "lastSyncedAt",
+                "livemode",
+                "orderReference",
+                "orderRevision",
+                "origin",
+                "paymentIntentId",
+                "refundableAmountMinor",
+                "refundedAmountMinor",
+                "reservedRefundAmountMinor",
+                "status"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\RefundSnapshot": {
+            "kind": "class",
+            "file": "src/ValueObjects/RefundSnapshot.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "amountMinor",
+                "currency",
+                "lastSyncedAt",
+                "operationId",
+                "paymentAttemptId",
+                "reason",
+                "refundId",
+                "status",
+                "stripeRefundId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\StripeCheckoutState": {
+            "kind": "class",
+            "file": "src/ValueObjects/StripeCheckoutState.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "accountId",
+                "amountMinor",
+                "currency",
+                "expiresAt",
+                "livemode",
+                "operationKey",
+                "orderReference",
+                "orderRevision",
+                "paymentIntentId",
+                "paymentStatus",
+                "sessionId",
+                "status",
+                "url"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\StripePaymentState": {
+            "kind": "class",
+            "file": "src/ValueObjects/StripePaymentState.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "accountId",
+                "amountCapturableMinor",
+                "amountMinor",
+                "captureMethod",
+                "capturedAmountMinor",
+                "chargeId",
+                "currency",
+                "livemode",
+                "partialAuthorizationStatus",
+                "paymentIntentId",
+                "paymentMethodType",
+                "refundedAmountMinor",
+                "status"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\ValueObjects\\StripeRefundState": {
+            "kind": "class",
+            "file": "src/ValueObjects/StripeRefundState.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "accountId",
+                "amountMinor",
+                "chargeId",
+                "currency",
+                "livemode",
+                "operationKey",
+                "paymentIntentId",
+                "reason",
+                "refundId",
+                "status"
+            ],
+            "constants": []
+        }
+    },
+    "models": {},
+    "capability_relations": {},
+    "tables": {
+        "attempts": "nvl_payments_attempts",
+        "operations": "nvl_payments_operations",
+        "refunds": "nvl_payments_refunds",
+        "webhook_events": "nvl_payments_webhook_events"
+    }
+}
