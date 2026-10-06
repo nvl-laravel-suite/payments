@@ -41,7 +41,7 @@ it('reads conservative balances using a fixed number of queries', function (int 
 
 it('reads only the configured Payments connection', function (): void {
     config(['database.connections.payments_secondary' => ['driver' => 'sqlite', 'database' => ':memory:'], 'payments.connection' => 'payments_secondary']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_create_payments_tables.php';
+    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     $attempt = createRefundAttempt();
     $access = Mockery::mock(PaymentManagementAccess::class);

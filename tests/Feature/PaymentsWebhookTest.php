@@ -182,7 +182,7 @@ it('fails closed when the signing secret is missing or Payments is disabled', fu
 
 it('waits for the configured Payments connection rather than the default connection', function (): void {
     config(['database.connections.payments_secondary' => config('database.connections.sqlite'), 'payments.connection' => 'payments_secondary']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_create_payments_tables.php';
+    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     webhookAttempt();
     $events = [];

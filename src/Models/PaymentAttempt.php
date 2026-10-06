@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Represents one historical attempt to pay a host-owned order.
@@ -65,5 +66,17 @@ final class PaymentAttempt extends Model
             'last_synced_at' => 'datetime',
             'last_reconcile_attempt_at' => 'datetime',
         ];
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return PaymentsTables::get(PaymentsTables::Attempts);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('payments') ?? parent::getConnectionName());
     }
 }

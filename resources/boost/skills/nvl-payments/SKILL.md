@@ -24,3 +24,11 @@ Use this skill for an application consuming `nvl/payments`. The host owns Orders
 - After an async Checkout failure, reconcile and retry `StartCheckoutAction`. It releases only a freshly confirmed closed unpaid Session with a non-collectible PaymentIntent (`requires_payment_method` or `canceled`, zero captured/refunded/capturable), or an expired Session without a PaymentIntent. Open Sessions require verified expiration using the same persisted key through timeouts. Processing/authorized/paid/ambiguous results stay blocked. Do not directly cancel Checkout-owned failed PaymentIntents; Stripe forbids it. Closed-flow safety follows the documented Session lifecycle/direct-confirmation restriction and must be exercised in Stripe test mode.
 - Host operation names are `start_checkout`, `attach_existing`, `capture`, `cancel_authorization`, `refund`, `recover_checkout`, `resolve_payment_exception`, and `view`; deny unknown operations.
 - Register the separate signed Payments webhook endpoint, schedule `nvl:payments:reconcile`, and run `nvl:payments:doctor --strict` at deployment. Exercise Checkout, capture, refund, and webhook retry in Stripe test mode before live use.
+
+## Shared consumer diagnostics
+
+Run `php artisan nvl:doctor --strict --format=json` to combine checks from loaded NVL providers. Retain the package Doctor command for its detailed report; both paths reuse the package-owned inspection service.
+
+### Brownfield storage identities
+
+Resolve all package tables through the table helper and canonical `payments.tables.*`, connections through `payments.connection` with Core/Laravel inheritance. Defaults use `nvl_payments_*`; migration filenames include that package slug. Never silently adopt a matching table or generic migration filename. Run shared `nvl:doctor --strict --format=json` and the explicit `nvl:schema:upgrade --package=payments --claim-legacy --dry-run --format=json` before upgrading owned legacy storage. Validate the complete plan and choose one migration owner. Preserve host records, constraint names and stored morph values. Deprecated config inputs last one major; canonical options take precedence.

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Records one signed Stripe event and its processing outcome.
@@ -44,5 +45,17 @@ final class PaymentWebhookEvent extends Model
     protected function casts(): array
     {
         return ['stripe_livemode' => 'boolean', 'processed_at' => 'datetime'];
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return PaymentsTables::get(PaymentsTables::WebhookEvents);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('payments') ?? parent::getConnectionName());
     }
 }

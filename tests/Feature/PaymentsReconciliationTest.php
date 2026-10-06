@@ -192,7 +192,7 @@ it('rejects reconciliation within a host transaction before Stripe reads', funct
 
 it('reconciles on the configured connection without changing default storage', function (): void {
     config(['database.connections.payments_secondary' => ['driver' => 'sqlite', 'database' => ':memory:'], 'payments.connection' => 'payments_secondary']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_create_payments_tables.php';
+    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     $secondary = createRefundAttempt();
     $this->gateway->shouldReceive('payment')->andReturnUsing(function () {

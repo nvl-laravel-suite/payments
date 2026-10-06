@@ -207,7 +207,7 @@ it('reserves one Session across two competing SQLite file processes', function (
     mkdir($directory);
     touch($directory.'/database.sqlite');
     config(['database.connections.checkout_race' => array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000]), 'payments.connection' => 'checkout_race']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_create_payments_tables.php';
+    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     $waitFor = static function (Closure $condition): void {
         $deadline = microtime(true) + 10;

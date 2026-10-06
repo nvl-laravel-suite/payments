@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Records one durable Stripe operation and its idempotency identity.
@@ -47,5 +48,17 @@ final class PaymentOperation extends Model
     protected function casts(): array
     {
         return ['resolved_at' => 'datetime'];
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return PaymentsTables::get(PaymentsTables::Operations);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('payments') ?? parent::getConnectionName());
     }
 }

@@ -15,7 +15,10 @@ use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Services\DenyExistingPaymentOwnership;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\DenyPaymentOrderProvider;
+use Nvl\Payments\Services\PaymentsDoctor;
 use Nvl\Payments\Services\StripePaymentGateway;
+use Nvl\Support\Doctor\DoctorCheck;
+use Nvl\Support\Doctor\PackageDoctorContributor;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Stripe\StripeClient;
 
@@ -27,6 +30,16 @@ final class PaymentsServiceProvider extends ServiceProvider
     /** Merge publishable Payments configuration without activating the package. */
     public function register(): void
     {
+        PackageDoctorContributor::register($this->app, 'nvl/payments', function (): array {
+            if (config('payments.enabled') !== true) {
+                return [new DoctorCheck('enabled', 'info', true, 'Payments is disabled; enable it explicitly before configuring its integrations.')];
+            }
+
+            $report = $this->app->make(PaymentsDoctor::class)->inspect();
+
+            return PackageDoctorContributor::booleanChecks($report, 'nvl:payments:doctor');
+        });
+
         $this->mergePackageConfiguration(__DIR__.'/../../config/payments.php', 'payments');
         $this->app->bindIf(PaymentGateway::class, fn (): StripePaymentGateway => new StripePaymentGateway(
             new StripeClient(Config::string('payments.stripe.secret')),

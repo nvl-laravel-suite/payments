@@ -101,3 +101,20 @@ In Stripe **test mode**, exercise automatic Checkout, manual authorization with 
 ## License
 
 MIT. See [LICENSE](LICENSE) and [SECURITY.md](SECURITY.md).
+
+## Shared consumer diagnostics
+
+Run `php artisan nvl:doctor --strict --format=json` to combine the read-only checks from loaded NVL package providers. Errors fail the gate, and strict mode also fails warnings. This package's existing Doctor command remains available and uses the same package-owned inspection service.
+
+## Next major: isolated schema identities
+
+Use `payments.tables.<logical-key>` for every table and `payments.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
+
+| Logical key | New default | Previous name |
+| --- | --- | --- |
+| `attempts` | `nvl_payments_attempts` | `nvl_payments_attempts` |
+| `operations` | `nvl_payments_operations` | `nvl_payments_operations` |
+| `refunds` | `nvl_payments_refunds` | `nvl_payments_refunds` |
+| `webhook_events` | `nvl_payments_webhook_events` | `nvl_payments_webhook_events` |
+
+Migration filenames contain `nvl_payments_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before any migration in the batch runs; legacy storage with old history needs an ownership decision.

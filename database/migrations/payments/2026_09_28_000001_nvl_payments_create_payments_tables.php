@@ -24,7 +24,7 @@ return new class extends Migration
     {
         $schema = $this->schema();
 
-        $schema->create(PaymentsTables::Attempts, function (Blueprint $table): void {
+        $schema->create(PaymentsTables::get(PaymentsTables::Attempts), function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('order_reference');
             $table->string('order_revision');
@@ -50,7 +50,7 @@ return new class extends Migration
             $table->index(['last_reconcile_attempt_at', 'id'], 'nvl_payments_attempt_reconcile_idx');
         });
 
-        $schema->create(PaymentsTables::Operations, function (Blueprint $table): void {
+        $schema->create(PaymentsTables::get(PaymentsTables::Operations), function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->uuid('payment_attempt_id')->nullable();
             $table->string('order_reference');
@@ -64,10 +64,10 @@ return new class extends Migration
             $table->timestamp('resolved_at')->nullable();
             $table->timestamps();
             $table->index(['payment_attempt_id', 'created_at'], 'nvl_payments_operation_attempt_idx');
-            $table->foreign('payment_attempt_id')->references('id')->on(PaymentsTables::Attempts)->restrictOnDelete();
+            $table->foreign('payment_attempt_id')->references('id')->on(PaymentsTables::get(PaymentsTables::Attempts))->restrictOnDelete();
         });
 
-        $schema->create(PaymentsTables::Refunds, function (Blueprint $table): void {
+        $schema->create(PaymentsTables::get(PaymentsTables::Refunds), function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->uuid('payment_attempt_id');
             $table->uuid('payment_operation_id')->unique();
@@ -80,11 +80,11 @@ return new class extends Migration
             $table->timestamp('last_synced_at')->nullable();
             $table->timestamps();
             $table->index(['payment_attempt_id', 'created_at'], 'nvl_payments_refund_attempt_idx');
-            $table->foreign('payment_attempt_id')->references('id')->on(PaymentsTables::Attempts)->restrictOnDelete();
-            $table->foreign('payment_operation_id')->references('id')->on(PaymentsTables::Operations)->restrictOnDelete();
+            $table->foreign('payment_attempt_id')->references('id')->on(PaymentsTables::get(PaymentsTables::Attempts))->restrictOnDelete();
+            $table->foreign('payment_operation_id')->references('id')->on(PaymentsTables::get(PaymentsTables::Operations))->restrictOnDelete();
         });
 
-        $schema->create(PaymentsTables::WebhookEvents, function (Blueprint $table): void {
+        $schema->create(PaymentsTables::get(PaymentsTables::WebhookEvents), function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('stripe_event_id')->unique();
             $table->string('type');
@@ -102,10 +102,10 @@ return new class extends Migration
     public function down(): void
     {
         $schema = $this->schema();
-        $schema->dropIfExists(PaymentsTables::WebhookEvents);
-        $schema->dropIfExists(PaymentsTables::Refunds);
-        $schema->dropIfExists(PaymentsTables::Operations);
-        $schema->dropIfExists(PaymentsTables::Attempts);
+        $schema->dropIfExists(PaymentsTables::get(PaymentsTables::WebhookEvents));
+        $schema->dropIfExists(PaymentsTables::get(PaymentsTables::Refunds));
+        $schema->dropIfExists(PaymentsTables::get(PaymentsTables::Operations));
+        $schema->dropIfExists(PaymentsTables::get(PaymentsTables::Attempts));
     }
 
     /** Resolve the configured schema builder. */
