@@ -11,6 +11,7 @@ use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Contracts\ResolvePaymentExceptionContract;
 use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
@@ -25,7 +26,7 @@ use Nvl\Payments\ValueObjects\PaymentSnapshot;
  *
  * @api
  */
-final class ResolvePaymentExceptionAction
+final class ResolvePaymentExceptionAction implements ResolvePaymentExceptionContract
 {
     /** Inject host admission, authoritative financial facts, and durable acceptance auditing. */
     public function __construct(

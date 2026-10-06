@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Payments\Actions;
 
 use Illuminate\Contracts\Auth\Authenticatable;
+use Nvl\Payments\Contracts\CancelAuthorizationContract;
 use Nvl\Payments\Services\AuthorizationOperations;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
@@ -13,7 +14,7 @@ use Nvl\Payments\ValueObjects\PaymentSnapshot;
  *
  * @api
  */
-final class CancelAuthorizationAction
+final class CancelAuthorizationAction implements CancelAuthorizationContract
 {
     /** Inject the shared authorization operation boundary. */
     public function __construct(private readonly AuthorizationOperations $operations) {}

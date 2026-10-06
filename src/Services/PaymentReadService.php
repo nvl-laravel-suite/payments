@@ -8,6 +8,7 @@ use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Contracts\PaymentReadContract;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
@@ -17,7 +18,7 @@ use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
  *
  * @api
  */
-final class PaymentReadService
+final class PaymentReadService implements PaymentReadContract
 {
     /** Inject host order admission and immutable projection mapping. */
     public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentProjection $projection) {}

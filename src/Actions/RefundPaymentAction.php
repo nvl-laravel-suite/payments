@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Contracts\RefundPaymentContract;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
@@ -27,7 +28,7 @@ use Throwable;
  *
  * @api
  */
-final class RefundPaymentAction
+final class RefundPaymentAction implements RefundPaymentContract
 {
     /** Inject trusted host admission, remote facts, and refund reservation boundaries. */
     public function __construct(

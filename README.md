@@ -84,6 +84,58 @@ A `payment_exception` preserves the original order revision and blocks another C
 
 Read an order timeline through `PaymentReadService` after `view` authorization. The timeline includes attempts, Stripe references, captured and conservatively refundable amounts, refunds, and sync time. Management actions and storefront/admin routes remain host-owned; Payments exposes only its signed webhook route.
 
+### Contract injection and host tests
+
+Inject `StartCheckoutContract`, `AttachExistingPaymentContract`, `RecoverCheckoutContract`, `CapturePaymentContract`, `CancelAuthorizationContract`, `RefundPaymentContract`, or `ResolvePaymentExceptionContract` from `Nvl\Payments\Contracts` for the corresponding complete management workflow. Their `execute` parameters and immutable result types match the existing Actions. Inject `PaymentReadContract` for `forOrder(string $orderReference, Authenticatable $actor): OrderPaymentTimeline`.
+
+```php
+use Illuminate\Contracts\Auth\Authenticatable;
+use Nvl\Payments\Contracts\PaymentReadContract;
+use Nvl\Payments\Contracts\StartCheckoutContract;
+use Nvl\Payments\ValueObjects\HostedCheckout;
+use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
+
+final readonly class OrderPayments
+{
+    public function __construct(
+        private StartCheckoutContract $checkout,
+        private PaymentReadContract $read,
+    ) {}
+
+    public function checkout(string $orderReference, Authenticatable $actor): HostedCheckout
+    {
+        return $this->checkout->execute($orderReference, $actor, 'https://shop.example/success', 'https://shop.example/cancel');
+    }
+
+    public function timeline(string $orderReference, Authenticatable $actor): OrderPaymentTimeline
+    {
+        return $this->read->forOrder($orderReference, $actor);
+    }
+}
+```
+
+The provider registers transient defaults with `bindIf`; host instances or closures installed before discovery are preserved. Replacing a contract later applies to newly resolved host services. Existing concrete Actions and `PaymentReadService` remain available with the same constructors and private dependency chains. Keep the four existing gateway/order/access/ownership extension contracts for their respective host responsibilities.
+
+In a host Pest test, substitute the workflow interface and return its actual declared value object. Resolve the host service through the container:
+
+```php
+use Illuminate\Auth\GenericUser;
+use Nvl\Payments\Contracts\PaymentReadContract;
+use Nvl\Payments\Contracts\StartCheckoutContract;
+use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
+
+$actor = new GenericUser(['id' => 'host-admin']);
+$timeline = new OrderPaymentTimeline('order-123', [], []);
+$read = Mockery::mock(PaymentReadContract::class);
+$read->shouldReceive('forOrder')->once()->with('order-123', $actor)->andReturn($timeline);
+$this->app->instance(PaymentReadContract::class, $read);
+$this->app->instance(StartCheckoutContract::class, Mockery::mock(StartCheckoutContract::class));
+
+expect($this->app->make(OrderPayments::class)->timeline('order-123', $actor))->toBe($timeline);
+```
+
+This substitutes the host orchestration boundary. It does not establish authorization, reservation safety, idempotency, or Stripe delivery; retain the owning integration tests and test-mode money movement checks. A read-only host service can inject only `PaymentReadContract`.
+
 ## Webhooks and recovery
 
 Register `POST /nvl/payments/stripe/webhook` as a separate Stripe endpoint with the Payments webhook secret. Select `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `payment_intent.succeeded`, `payment_intent.processing`, `payment_intent.payment_failed`, `payment_intent.canceled`, `payment_intent.amount_capturable_updated`, and `charge.refunded`. Refund status changes are also repaired by reconciliation. Keep signature verification enabled and exempt this endpoint from session CSRF middleware. The package deduplicates event IDs and reads authoritative Stripe facts before changing financial state.

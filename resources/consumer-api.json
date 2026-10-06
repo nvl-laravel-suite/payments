@@ -75,6 +75,33 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Contracts\\AttachExistingPaymentContract": {
+            "kind": "interface",
+            "file": "src/Contracts/AttachExistingPaymentContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\CancelAuthorizationContract": {
+            "kind": "interface",
+            "file": "src/Contracts/CancelAuthorizationContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\CapturePaymentContract": {
+            "kind": "interface",
+            "file": "src/Contracts/CapturePaymentContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Contracts\\ExistingPaymentOwnership": {
             "kind": "interface",
             "file": "src/Contracts/ExistingPaymentOwnership.php",
@@ -115,6 +142,51 @@
             "file": "src/Contracts/PaymentOrderProvider.php",
             "methods": [
                 "resolve"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\PaymentReadContract": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentReadContract.php",
+            "methods": [
+                "forOrder"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\RecoverCheckoutContract": {
+            "kind": "interface",
+            "file": "src/Contracts/RecoverCheckoutContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\RefundPaymentContract": {
+            "kind": "interface",
+            "file": "src/Contracts/RefundPaymentContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\ResolvePaymentExceptionContract": {
+            "kind": "interface",
+            "file": "src/Contracts/ResolvePaymentExceptionContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\StartCheckoutContract": {
+            "kind": "interface",
+            "file": "src/Contracts/StartCheckoutContract.php",
+            "methods": [
+                "execute"
             ],
             "properties": [],
             "constants": []

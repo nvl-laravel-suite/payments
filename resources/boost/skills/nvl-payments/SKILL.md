@@ -9,10 +9,17 @@ Use this skill for an application consuming `nvl/payments`. The host owns Orders
 
 ## Integrate
 
-- Install `nvl/payments:^2.0`, publish `nvl-payments-config` and `nvl-payments-skills`, then choose vendor-loaded or published migrations. Keep `payments.enabled=false` during `php artisan migrate`: vendor mode sets `nvl-payments.migrations.enabled=true`, while published mode leaves it false. Never enable both migration sources; enable payment routes after schema, host bindings, and Stripe setup.
+- Install `nvl/payments:^5.0`, publish `nvl-payments-config` and `nvl-payments-skills`, then choose vendor-loaded or published migrations. Keep `nvl-payments.enabled=false` during `php artisan migrate`: vendor mode sets `nvl-payments.migrations.enabled=true`, while published mode leaves it false. Never enable both migration sources; enable payment routes after schema, host bindings, and Stripe setup.
 - Bind `PaymentOrderProvider`, `PaymentManagementAccess`, and `ExistingPaymentOwnership` in the host. Defaults deny. Resolve amount and currency from server-owned Order facts and prove ownership before importing an existing payment.
 - Configure the Stripe key, account ID, test/live mode, Payments-specific webhook secret, allowed currencies, and HTTPS return hosts. Enable Payments only after schema and bindings are ready.
 - Redirect customers to the hosted Checkout URL. Treat signed webhook or reconciliation state as payment evidence; a browser return is not evidence.
+
+## Inject and test complete workflows
+
+- Inject `StartCheckoutContract`, `AttachExistingPaymentContract`, `RecoverCheckoutContract`, `CapturePaymentContract`, `CancelAuthorizationContract`, `RefundPaymentContract`, and `ResolvePaymentExceptionContract` from `Nvl\Payments\Contracts` for the matching complete management workflows. Each `execute` retains its native parameters and immutable result type. `RefundPaymentContract` keeps the nullable note required.
+- Inject `PaymentReadContract` and call `forOrder($orderReference, $actor)` for the declared `OrderPaymentTimeline`. Continue using the existing four gateway/order/access/ownership extension contracts for their host responsibilities.
+- Defaults use transient `bindIf` registrations. Host instances and closures installed before discovery survive registration. A late replacement affects newly resolved host services; existing services keep their injected dependency. Concrete Actions and `PaymentReadService` retain their native constructors and private chains through major 5.
+- For host orchestration tests, instance-bind an interface mock or implementation, return a real `HostedCheckout`, `PaymentSnapshot`, `RefundSnapshot`, or `OrderPaymentTimeline`, and resolve the host service from the container. Assert exact inputs and host decisions. Guard owning implementation/gateway/order/access/SDK/storage resolution and measure effects after setup. Such substitution does not prove authorization, durable lifecycle behavior, or Stripe delivery; retain owning integration and test-mode checks. The README includes constructor injection and a native timeline fixture example.
 
 ## Money movement and recovery
 

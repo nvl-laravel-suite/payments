@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Payments\Actions;
 
 use Illuminate\Contracts\Auth\Authenticatable;
+use Nvl\Payments\Contracts\CapturePaymentContract;
 use Nvl\Payments\Services\AuthorizationOperations;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
@@ -13,7 +14,7 @@ use Nvl\Payments\ValueObjects\PaymentSnapshot;
  *
  * @api
  */
-final class CapturePaymentAction
+final class CapturePaymentAction implements CapturePaymentContract
 {
     /** Inject the shared authorization operation boundary. */
     public function __construct(private readonly AuthorizationOperations $operations) {}

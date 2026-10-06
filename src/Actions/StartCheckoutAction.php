@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Contracts\StartCheckoutContract;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\PaymentOperationJournal;
@@ -27,7 +28,7 @@ use Throwable;
  *
  * @api
  */
-final class StartCheckoutAction
+final class StartCheckoutAction implements StartCheckoutContract
 {
     /** Inject host authorization, trusted facts, and the durable Stripe boundary. */
     public function __construct(

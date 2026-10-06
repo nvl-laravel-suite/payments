@@ -8,6 +8,7 @@ use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Contracts\RecoverCheckoutContract;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Services\PaymentReconciler;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
@@ -17,7 +18,7 @@ use Nvl\Payments\ValueObjects\PaymentSnapshot;
  *
  * @api
  */
-final class RecoverCheckoutAction
+final class RecoverCheckoutAction implements RecoverCheckoutContract
 {
     /** Inject host admission and the shared reconciliation boundary. */
     public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentReconciler $reconciler) {}

@@ -9,6 +9,7 @@ use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use InvalidArgumentException;
+use Nvl\Payments\Contracts\AttachExistingPaymentContract;
 use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
@@ -28,7 +29,7 @@ use Throwable;
  *
  * @api
  */
-final class AttachExistingPaymentAction
+final class AttachExistingPaymentAction implements AttachExistingPaymentContract
 {
     /** Inject trusted host boundaries and the shared payment journal and state writer. */
     public function __construct(
