@@ -87,7 +87,7 @@ final class ResolvePaymentExceptionAction implements ResolvePaymentExceptionCont
                 $current->update(['state' => $state]);
                 $this->journal->complete($operation, $current->stripe_payment_intent_id ?? $current->stripe_charge_id ?? $current->id);
                 $event = new PaymentStateChanged($current->order_reference, $current->id, 'payment_exception', $state, $current->stripe_payment_intent_id, $current->stripe_charge_id, $current->stripe_checkout_session_id);
-                ($this->domainEvents ?? app(DomainEventDispatcher::class))->dispatch($event, $connection);
+                ($this->domainEvents ?? DomainEventDispatcher::current())->dispatch($event, $connection);
             }, 5);
         }
 
