@@ -41,7 +41,7 @@ For support, [open an issue](https://github.com/nvl-laravel-suite/payments/issue
 
 Payments owns Checkout attempts, authorizations, captures, cancellations, attached Stripe payments, refunds, signed webhooks, reconciliation, and an order payment timeline. The host owns Orders, calculated amounts, customer admission, management authorization, fulfillment, and UI. A Checkout return URL does not prove payment; use confirmed package state and its after-commit `PaymentStateChanged` event. This package makes no money movement until explicitly configured and enabled.
 
-Payments requires PHP 8.4, Laravel 13, `nvl/core:^5.0`, and Stripe PHP. It has no dependency on Tenancy, Billing, or Cashier. It does not register Cashier models or change Cashier routes. The optional `nvl/billing` package handles tenant subscriptions separately; both may coexist with separate webhook URLs and signing secrets. The suite metapackage does not install Payments.
+Payments requires PHP 8.4, Laravel 12–13, `nvl/core:^5.0`, and Stripe PHP. It has no dependency on Tenancy, Billing, or Cashier. It does not register Cashier models or change Cashier routes. The optional `nvl/billing` package handles tenant subscriptions separately; both may coexist with separate webhook URLs and signing secrets. The suite metapackage does not install Payments.
 
 ## Requirements and installation
 
