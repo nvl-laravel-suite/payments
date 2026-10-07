@@ -38,7 +38,7 @@ final class ResolvePaymentExceptionAction implements ResolvePaymentExceptionCont
         private readonly PaymentOperationJournal $journal,
         private readonly PaymentStateSyncer $syncer,
         private readonly PaymentProjection $projection,
-        private DomainEventDispatcher $domainEvents,
+        private readonly ?DomainEventDispatcher $domainEvents = null,
     ) {}
 
     /** Accept a confirmed payment exception once with an immutable actor and operation UUID. */
@@ -87,7 +87,7 @@ final class ResolvePaymentExceptionAction implements ResolvePaymentExceptionCont
                 $current->update(['state' => $state]);
                 $this->journal->complete($operation, $current->stripe_payment_intent_id ?? $current->stripe_charge_id ?? $current->id);
                 $event = new PaymentStateChanged($current->order_reference, $current->id, 'payment_exception', $state, $current->stripe_payment_intent_id, $current->stripe_charge_id, $current->stripe_checkout_session_id);
-                $this->domainEvents->dispatch($event, $connection);
+                ($this->domainEvents ?? app(DomainEventDispatcher::class))->dispatch($event, $connection);
             }, 5);
         }
 

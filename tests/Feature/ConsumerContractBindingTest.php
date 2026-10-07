@@ -153,8 +153,10 @@ it('retains the native constructors and private readonly promoted dependencies',
         $concrete = new ReflectionClass($implementation);
         $constructor = $concrete->getConstructor();
         expect($constructor->isPublic())->toBeTrue()->and($constructor->getAttributes())->toBe([])
-            ->and(count($constructor->getParameters()))->toBe(count($parameters));
-        foreach ($constructor->getParameters() as $position => $parameter) {
+            ->and($constructor->getNumberOfRequiredParameters())->toBe(count($parameters));
+        config(['nvl-payments.stripe.secret' => 'sk_test_contract_constructor', 'nvl-payments.stripe.account_id' => 'acct_contract_constructor', 'nvl-payments.stripe.livemode' => false]);
+        expect($concrete->newInstanceArgs(array_map(static fn (array $parameter): object => app($parameter[1]), $parameters)))->toBeInstanceOf($implementation);
+        foreach (array_slice($constructor->getParameters(), 0, count($parameters)) as $position => $parameter) {
             $property = $concrete->getProperty($parameter->getName());
             expect([$parameter->getName(), (string) $parameter->getType()])->toBe($parameters[$position])
                 ->and($parameter->isPromoted())->toBeTrue()
