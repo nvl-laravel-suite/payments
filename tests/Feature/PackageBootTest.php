@@ -65,7 +65,7 @@ it('loads opted-in vendor migrations while payment routes remain disabled', func
 
     $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
 
-    expect(array_map(realpath(...), app('migrator')->paths()))->toContain(dirname(__DIR__, 2).'/database/migrations/payments')
+    expect(array_map(realpath(...), app('migrator')->paths()))->toContain(realpath(dirname(__DIR__, 2).'/database/migrations/payments'))
         ->and(Schema::hasTable(PaymentsTables::Attempts))->toBeTrue()
         ->and(Route::getRoutes()->getByName('nvl.payments.webhook'))->toBeNull();
 });
