@@ -43,7 +43,8 @@ it('limits a sweep and reads IDs in configured database pages', function (): voi
     $connection = (new PaymentAttempt)->getConnection();
     $connection->enableQueryLog();
     expect(Artisan::call('nvl:payments:reconcile'))->toBe(0)->and(Artisan::output())->toContain('2 reconciled');
-    $pages = collect($connection->getQueryLog())->filter(fn ($query) => str_contains($query['query'], 'select "id"'));
+    $selectId = 'select '.$connection->getQueryGrammar()->wrap('id');
+    $pages = collect($connection->getQueryLog())->filter(fn ($query) => str_contains($query['query'], $selectId));
     expect($pages)->toHaveCount(2);
     foreach ($pages as $page) {
         expect($page['query'])->toContain('limit 1');
