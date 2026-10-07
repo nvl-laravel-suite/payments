@@ -49,5 +49,5 @@ it('reads only the configured Payments connection', function (): void {
     app()->instance(PaymentManagementAccess::class, $access);
     $timeline = app(PaymentReadService::class)->forOrder('order-1', new GenericUser(['id' => 'admin']));
     expect($timeline->payments)->toHaveCount(1)->and($timeline->payments[0]->attemptId)->toBe($attempt->id)
-        ->and(DB::connection('sqlite')->table(PaymentAttempt::TABLE)->count())->toBe(0);
+        ->and(DB::connection(config('database.default'))->table(PaymentAttempt::TABLE)->count())->toBe(0);
 });

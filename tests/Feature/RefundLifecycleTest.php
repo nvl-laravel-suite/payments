@@ -52,7 +52,7 @@ it('supports repeated partial refunds without double counting known remote refun
     $this->gateway->shouldReceive('refund')->with('pi_refund', 700, 'requested_by_customer', Mockery::type('string'))->once()->andReturn(remoteRefund());
     $this->gateway->shouldReceive('refund')->with('pi_refund', 500, 'requested_by_customer', Mockery::type('string'))->once()->andReturn(remoteRefund('re_second', 500));
     refundPayment();
-    expect(refundPayment(500)->status)->toBe('succeeded')->and(PaymentRefund::sum('amount_minor'))->toBe(1200);
+    expect(refundPayment(500)->status)->toBe('succeeded')->and((int) PaymentRefund::sum('amount_minor'))->toBe(1200);
     expect(fn () => refundPayment(1))->toThrow(DomainException::class);
 });
 

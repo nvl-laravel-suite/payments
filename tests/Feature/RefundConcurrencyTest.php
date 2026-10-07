@@ -92,7 +92,7 @@ it('atomically reserves only one refund when competing processes would exceed ca
         expect($results)->toBe(['accepted', 'blocked'])->and(file_get_contents($directory.'/refunds'))->toBe("refund\n")
             ->and(PaymentRefund::count())->toBe(1)->and(PaymentRefund::sole()->amount_minor)->toBe(700)
             ->and(PaymentOperation::sole()->status)->toBe('completed')
-            ->and(DB::connection('sqlite')->table(PaymentRefund::TABLE)->count())->toBe(0);
+            ->and(DB::connection(config('database.default'))->table(PaymentRefund::TABLE)->count())->toBe(0);
     } finally {
         touch($directory.'/release');
         foreach ($children as $pid) {

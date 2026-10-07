@@ -167,7 +167,7 @@ it('uses the configured Payments connection for its journal attempt and after-co
     $this->gateway->shouldReceive('resolveExisting')->once()->andReturn(attachmentState());
     attachPayment($this->uuid);
     expect(PaymentAttempt::count())->toBe(1)->and(PaymentOperation::count())->toBe(1)
-        ->and(DB::connection('sqlite')->table(PaymentsTables::Attempts)->count())->toBe(0)->and(DB::connection('sqlite')->table(PaymentsTables::Operations)->count())->toBe(0);
+        ->and(DB::connection(config('database.default'))->table(PaymentsTables::Attempts)->count())->toBe(0)->and(DB::connection(config('database.default'))->table(PaymentsTables::Operations)->count())->toBe(0);
 });
 
 it('rejects invalid operation and reference inputs before durable reservation', function (string $reference, string $uuid, string $actor): void {

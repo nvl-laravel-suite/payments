@@ -181,7 +181,7 @@ it('fails closed when the signing secret is missing or Payments is disabled', fu
 });
 
 it('waits for the configured Payments connection rather than the default connection', function (): void {
-    config(['database.connections.payments_secondary' => config('database.connections.sqlite'), 'nvl-payments.connection' => 'payments_secondary']);
+    config(['database.connections.payments_secondary' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true], 'nvl-payments.connection' => 'payments_secondary']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     webhookAttempt();

@@ -152,7 +152,7 @@ it('rejects uncorrelated Dashboard refund facts atomically', function (): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState(700));
     $this->gateway->shouldReceive('refunds')->andReturn([new StripeRefundState('re_wrong', 'pi_other', 'ch_other', 'acct_test', false, 700, 'eur', 'succeeded', 'requested_by_customer')]);
     expect(fn () => app(ReconcilePaymentAction::class)->execute($this->attempt->id))->toThrow(DomainException::class);
-    expect(PaymentRefund::count())->toBe(0)->and(DB::connection('sqlite')->table(PaymentAttempt::TABLE)->where('id', $this->attempt->id)->value('refunded_amount_minor'))->toBe(0);
+    expect(PaymentRefund::count())->toBe(0)->and(DB::connection(config('database.default'))->table(PaymentAttempt::TABLE)->where('id', $this->attempt->id)->value('refunded_amount_minor'))->toBe(0);
 });
 
 it('requires recovery authorization before any Stripe lookup', function (): void {
@@ -203,7 +203,7 @@ it('reconciles on the configured connection without changing default storage', f
     $this->gateway->shouldReceive('refunds')->andReturn([remoteRefund()]);
     app(ReconcilePaymentAction::class)->execute($secondary->id);
     expect($secondary->refresh()->refunded_amount_minor)->toBe(700)
-        ->and(DB::connection('sqlite')->table(PaymentAttempt::TABLE)->where('id', $this->attempt->id)->value('refunded_amount_minor'))->toBe(0);
+        ->and(DB::connection(config('database.default'))->table(PaymentAttempt::TABLE)->where('id', $this->attempt->id)->value('refunded_amount_minor'))->toBe(0);
 });
 
 it('rejects altered Checkout recovery facts before attachment', function (string $field, mixed $value): void {
