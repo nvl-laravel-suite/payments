@@ -3,7 +3,9 @@
 
 All notable changes to `nvl/payments` are documented here.
 
-## [5.0.0] — release candidate (unpublished)
+## [Unreleased]
+
+## [5.0.0] - 2026-10-08
 
 ### Added
 
@@ -14,7 +16,7 @@ All notable changes to `nvl/payments` are documented here.
 ### Changed
 
 - Classify the supported consumer PHP surface with explicit source annotations and restrict package model handles to declared identity and in-memory read fields; preserve existing workflow behavior and concrete signatures.
-- Prepare lockstep major 5 with required and development NVL peer floors of `^5.0`. This candidate has not been tagged or published.
+- Adopt lockstep major 5 with required and development NVL peer floors of `^5.0`.
 - Move configuration, env inputs and public package names to the canonical NVL namespace.
 - Remain an optional installation outside the 21-member suite metapackage.
 - Review [UPGRADING.md](UPGRADING.md) before adopting the new names and infrastructure boundaries.
