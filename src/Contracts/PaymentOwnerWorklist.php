@@ -6,7 +6,11 @@ namespace Nvl\Payments\Contracts;
 
 use Nvl\Support\Ownership\ValueObjects\OwnerReference;
 
-/** Enumerates explicit native payment owners for independently authorized bounded maintenance. @api */
+/**
+ * Enumerates explicit native payment owners for independently authorized bounded maintenance.
+ *
+ * @api
+ */
 interface PaymentOwnerWorklist
 {
     /** @return iterable<OwnerReference> */

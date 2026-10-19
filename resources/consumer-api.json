@@ -147,6 +147,15 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Contracts\\PaymentOwnerWorklist": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentOwnerWorklist.php",
+            "methods": [
+                "owners"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Contracts\\PaymentReadContract": {
             "kind": "interface",
             "file": "src/Contracts/PaymentReadContract.php",
@@ -415,13 +424,15 @@
             "kind": "class",
             "file": "src/ValueObjects/OrderPaymentSnapshot.php",
             "methods": [
-                "__construct"
+                "__construct",
+                "jsonSerialize"
             ],
             "properties": [
                 "amountMinor",
                 "currency",
                 "email",
                 "label",
+                "owner",
                 "payable",
                 "reference",
                 "revision"

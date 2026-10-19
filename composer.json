@@ -24,6 +24,7 @@
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
         "nvl/ownership": "^5.0",
+        "nvl/tenancy": "^5.0",
         "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0"
