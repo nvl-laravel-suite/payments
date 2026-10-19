@@ -10,12 +10,12 @@
         "orders"
     ],
     "require": {
-        "php": "^8.4",
         "ext-filter": "*",
         "ext-pdo": "*",
         "laravel/framework": "^12.0 || ^13.0",
         "nesbot/carbon": "^3.0",
-        "nvl/core": "^5.0",
+        "nvl/core": "^5.1",
+        "php": "^8.4",
         "stripe/stripe-php": "^21.0",
         "symfony/http-foundation": "^7.4 || ^8.0"
     },
@@ -23,6 +23,7 @@
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
+        "nvl/ownership": "^5.0",
         "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0"
@@ -101,5 +102,11 @@
         "docs": "https://github.com/nvl-laravel-suite/payments#readme",
         "issues": "https://github.com/nvl-laravel-suite/payments/issues",
         "security": "https://github.com/nvl-laravel-suite/payments/security/policy"
+    },
+    "suggest": {
+        "nvl/ownership": "Adds optional model-declared ownership, isolation, adoption and captured worker contexts."
+    },
+    "conflict": {
+        "nvl/ownership": "<5.0 || >=6.0"
     }
 }

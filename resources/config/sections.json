@@ -5,7 +5,8 @@
             "common": [
                 "connection",
                 "enabled",
-                "migrations.enabled"
+                "migrations.enabled",
+                "ownership.scoped"
             ],
             "advanced": [
                 "allowed_currencies",

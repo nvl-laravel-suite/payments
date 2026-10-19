@@ -6,6 +6,7 @@ use Nvl\Support\Config\PackageEnvironment;
 
 /** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
+    'ownership' => ['scoped' => true],
     'enabled' => false,
     'connection' => null,
     // Choose vendor migrations or publish them into the host; never enable both modes.
