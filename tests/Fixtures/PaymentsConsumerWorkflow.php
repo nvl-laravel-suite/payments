@@ -6,6 +6,7 @@ namespace Nvl\Payments\Tests\Fixtures;
 
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Foundation\Application;
+use InvalidArgumentException;
 use Nvl\Payments\Contracts\AttachExistingPaymentContract;
 use Nvl\Payments\Contracts\CancelAuthorizationContract;
 use Nvl\Payments\Contracts\CapturePaymentContract;

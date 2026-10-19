@@ -18,6 +18,7 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\PaymentOperationJournal;
+use Nvl\Payments\Services\PaymentOrderOwnership;
 use Nvl\Payments\Services\PaymentProjection;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
@@ -38,6 +39,7 @@ final class ResolvePaymentExceptionAction implements ResolvePaymentExceptionCont
         private readonly PaymentOperationJournal $journal,
         private readonly PaymentStateSyncer $syncer,
         private readonly PaymentProjection $projection,
+        private readonly PaymentOrderOwnership $scope,
         private readonly ?DomainEventDispatcher $domainEvents = null,
     ) {}
 
@@ -46,6 +48,7 @@ final class ResolvePaymentExceptionAction implements ResolvePaymentExceptionCont
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'resolve_payment_exception', $order);
         $connection = $attempt->getConnection();
         if (! config()->boolean('nvl-payments.enabled')) {

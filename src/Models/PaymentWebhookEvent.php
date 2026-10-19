@@ -10,12 +10,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Database\Factories\PaymentWebhookEventFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
+use Nvl\Payments\Models\Concerns\HasPaymentOwnership;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
 
 /**
  * Records one signed Stripe event and its processing outcome.
  *
+ * @property string $owner_scope_key
+ * @property string|null $owner_reference
  * @property string $id
  * @property string $stripe_event_id
  * @property string $type
@@ -32,11 +36,12 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @nvl-consumer-read id
  */
-final class PaymentWebhookEvent extends Model
+final class PaymentWebhookEvent extends Model implements Ownable
 {
     /** @use HasFactory<PaymentWebhookEventFactory> */
     use HasFactory;
 
+    use HasPaymentOwnership;
     use HasUuids;
     use UsesPaymentsConnection;
 

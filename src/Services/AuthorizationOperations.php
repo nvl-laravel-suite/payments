@@ -32,6 +32,7 @@ final class AuthorizationOperations
         private readonly PaymentGateway $gateway,
         private readonly PaymentOperationJournal $journal,
         private readonly PaymentStateSyncer $syncer,
+        private readonly PaymentOrderOwnership $scope,
     ) {}
 
     /** Reserve one final authorization operation before making remote calls outside transactions. */
@@ -39,6 +40,7 @@ final class AuthorizationOperations
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, $kind, $order);
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');

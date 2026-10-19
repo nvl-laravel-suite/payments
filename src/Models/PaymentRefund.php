@@ -7,15 +7,20 @@ namespace Nvl\Payments\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Database\Factories\PaymentRefundFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
+use Nvl\Payments\Models\Concerns\HasPaymentOwnership;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
 
 /**
  * Stores one requested or confirmed refund against an order payment.
  *
+ * @property string $owner_scope_key
+ * @property string|null $owner_reference
  * @property string $id
  * @property string $payment_attempt_id
  * @property string $payment_operation_id
@@ -33,11 +38,12 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @nvl-consumer-read id
  */
-final class PaymentRefund extends Model
+final class PaymentRefund extends Model implements Ownable
 {
     /** @use HasFactory<PaymentRefundFactory> */
     use HasFactory;
 
+    use HasPaymentOwnership;
     use HasUuids;
     use UsesPaymentsConnection;
 
@@ -55,6 +61,14 @@ final class PaymentRefund extends Model
     protected function casts(): array
     {
         return ['amount_minor' => 'integer', 'last_synced_at' => 'datetime'];
+    }
+
+    /** Resolve the canonical native refund parent.
+     * @return BelongsTo<PaymentAttempt,$this>
+     */
+    public function paymentAttempt(): BelongsTo
+    {
+        return $this->belongsTo(PaymentAttempt::class, 'payment_attempt_id');
     }
 
     /** Resolve the configured package storage table. */

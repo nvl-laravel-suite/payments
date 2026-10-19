@@ -19,6 +19,8 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\PaymentOperationJournal;
+use Nvl\Payments\Services\PaymentOrderOwnership;
+use Nvl\Payments\Services\PaymentRefundWriter;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Services\RefundBalance;
 use Nvl\Payments\ValueObjects\RefundSnapshot;
@@ -40,6 +42,8 @@ final class RefundPaymentAction implements RefundPaymentContract
         private readonly PaymentOperationJournal $journal,
         private readonly PaymentStateSyncer $syncer,
         private readonly RefundBalance $balance,
+        private readonly PaymentOrderOwnership $scope,
+        private readonly PaymentRefundWriter $refundWriter,
     ) {}
 
     /** Reserve refundable funds atomically and issue one idempotent refund to the original payment method. */
@@ -47,6 +51,7 @@ final class RefundPaymentAction implements RefundPaymentContract
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'refund', $order);
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
@@ -89,7 +94,7 @@ final class RefundPaymentAction implements RefundPaymentContract
                 throw PaymentsException::because(PaymentsResponseCode::RefundBalanceExceeded, 'Refund exceeds the available captured balance.');
             }
             $operation->update(['payment_attempt_id' => $current->id]);
-            PaymentRefund::query()->create(['payment_attempt_id' => $current->id, 'payment_operation_id' => $operation->id,
+            $this->refundWriter->create(['payment_attempt_id' => $current->id, 'payment_operation_id' => $operation->id,
                 'amount_minor' => $amountMinor, 'currency' => $current->currency, 'reason' => $reason, 'internal_note' => $note, 'status' => 'reserved']);
 
             return $operation;

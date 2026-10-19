@@ -18,6 +18,7 @@ use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\PaymentOperationJournal;
+use Nvl\Payments\Services\PaymentOrderOwnership;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\ValueObjects\HostedCheckout;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
@@ -39,12 +40,14 @@ final class StartCheckoutAction implements StartCheckoutContract
         private readonly PaymentGateway $gateway,
         private readonly PaymentOperationJournal $journal,
         private readonly PaymentStateSyncer $syncer,
+        private readonly PaymentOrderOwnership $scope,
     ) {}
 
     /** Return an existing safe URL or reserve and create a new Checkout Session. */
     public function execute(string $orderReference, Authenticatable $actor, string $successUrl, string $cancelUrl): HostedCheckout
     {
         $order = $this->orders->resolve($orderReference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'start_checkout', $order);
         $this->validate($order, $successUrl, $cancelUrl);
         $connection = (new PaymentAttempt)->getConnection();
@@ -59,7 +62,7 @@ final class StartCheckoutAction implements StartCheckoutContract
 
         for ($iteration = 0; $iteration < 3; $iteration++) {
             $attempt = $connection->transaction(function () use ($order, $actorId, $successUrl, $cancelUrl): PaymentAttempt {
-                $attempt = PaymentAttempt::query()->createOrFirst(['reservation_key' => hash('sha256', $order->reference)], [
+                $attempt = PaymentAttempt::query()->createOrFirst(['reservation_key' => $this->scope->reservationKey($order->reference)], [
                     'order_reference' => $order->reference, 'order_revision' => $order->revision,
                     'amount_minor' => $order->amountMinor, 'currency' => strtoupper($order->currency),
                     'origin' => 'checkout', 'state' => 'reserved',

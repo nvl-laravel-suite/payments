@@ -10,6 +10,7 @@ use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
+use Nvl\Payments\Ownership\PaymentsProviderAdmission;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Stripe\Event;
 
@@ -26,15 +27,22 @@ final class ProcessPaymentsWebhookAction
     private const array CHECKOUT_EVENTS = ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed'];
 
     /** Inject the authoritative remote reader and reusable state boundary. */
-    public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer) {}
+    public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentsProviderAdmission $ownership) {}
 
     /** Persist a signed delivery once, allowing failed remote reads to be retried. */
     public function execute(Event $event): void
+    {
+        $this->ownership->run($event, fn () => $this->executeAdmitted($event));
+    }
+
+    /** Apply only inside the independently admitted stored payment owner. */
+    private function executeAdmitted(Event $event): void
     {
         $record = PaymentWebhookEvent::firstOrCreate(['stripe_event_id' => $event->id], [
             'type' => $event->type, 'status' => 'pending', 'stripe_object_id' => $event->data->object->id,
             'stripe_account_id' => $event['account'], 'stripe_livemode' => $event->livemode,
         ]);
+        $this->ownership->assertReceipt($record, $event);
         if (in_array($record->status, ['processed', 'ignored'], true)) {
             return;
         }

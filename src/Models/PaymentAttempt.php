@@ -10,12 +10,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Database\Factories\PaymentAttemptFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
+use Nvl\Payments\Models\Concerns\HasPaymentOwnership;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
 
 /**
  * Represents one historical attempt to pay a host-owned order.
  *
+ * @property string $owner_scope_key
+ * @property string|null $owner_reference
  * @property string $id
  * @property string $order_reference
  * @property string $order_revision
@@ -43,11 +47,12 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @nvl-consumer-read id
  */
-final class PaymentAttempt extends Model
+final class PaymentAttempt extends Model implements Ownable
 {
     /** @use HasFactory<PaymentAttemptFactory> */
     use HasFactory;
 
+    use HasPaymentOwnership;
     use HasUuids;
     use UsesPaymentsConnection;
 

@@ -10,6 +10,7 @@ use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Events\DomainEventDispatcher;
@@ -18,11 +19,12 @@ use Nvl\Support\Events\DomainEventDispatcher;
 final class PaymentStateSyncer
 {
     /** Retain the source-aware domain event dispatcher. */
-    public function __construct(private DomainEventDispatcher $domainEvents) {}
+    public function __construct(private DomainEventDispatcher $domainEvents, private PaymentsIntegrityGuard $integrity) {}
 
     /** Synchronize only a previously correlated payment and notify after its connection commits. */
     public function sync(StripePaymentState $payment): void
     {
+        $this->integrity->assertReady();
         $this->apply($payment, false);
     }
 
@@ -34,6 +36,7 @@ final class PaymentStateSyncer
      */
     public function reconcile(StripePaymentState $payment, array $refunds): void
     {
+        $this->integrity->assertReady();
         $succeeded = 0;
         foreach ($refunds as $refund) {
             if ($refund->status === 'succeeded') {

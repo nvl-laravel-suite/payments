@@ -22,12 +22,13 @@ use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
 final class PaymentReadService implements PaymentReadContract
 {
     /** Inject host order admission and immutable projection mapping. */
-    public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentProjection $projection) {}
+    public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentProjection $projection, private readonly PaymentOrderOwnership $scope) {}
 
     /** Resolve and authorize the host order before reading its payment history. */
     public function forOrder(string $orderReference, Authenticatable $actor): OrderPaymentTimeline
     {
         $order = $this->orders->resolve($orderReference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'view', $order);
         if ($order->reference !== $orderReference) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');

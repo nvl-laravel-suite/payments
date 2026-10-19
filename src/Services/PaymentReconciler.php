@@ -12,6 +12,7 @@ use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
+use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 use Nvl\Payments\ValueObjects\StripeCheckoutState;
 use Nvl\Payments\ValueObjects\StripePaymentState;
@@ -21,11 +22,12 @@ use Nvl\Payments\ValueObjects\StripeRefundState;
 final class PaymentReconciler
 {
     /** Inject Stripe reads, validation, durable state, and projection boundaries. */
-    public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentOperationJournal $journal, private readonly RefundBalance $balance, private readonly PaymentProjection $projection) {}
+    public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentOperationJournal $journal, private readonly RefundBalance $balance, private readonly PaymentProjection $projection, private readonly PaymentsIntegrityGuard $integrity, private readonly PaymentRefundWriter $refundWriter) {}
 
     /** Read Stripe outside transactions and atomically apply only unchanged local observations. */
     public function reconcile(string $attemptId, ?string $recoverySessionId = null): PaymentSnapshot
     {
+        $this->integrity->assertReady();
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $connection = $attempt->getConnection();
         if (! config()->boolean('nvl-payments.enabled')) {
@@ -151,7 +153,7 @@ final class PaymentReconciler
             if ($local === null) {
                 $operation = $this->journal->reserve('reconcile_refund', $attempt->order_reference, (string) Str::uuid(), 'system:reconciliation', $remote->refundId, $remote->amountMinor);
                 $operation->update(['payment_attempt_id' => $attempt->id]);
-                $local = PaymentRefund::query()->create(['payment_attempt_id' => $attempt->id, 'payment_operation_id' => $operation->id, 'stripe_refund_id' => $remote->refundId, 'amount_minor' => $remote->amountMinor, 'currency' => strtoupper($remote->currency), 'reason' => $remote->reason, 'status' => $remote->status, 'last_synced_at' => now()]);
+                $local = $this->refundWriter->create(['payment_attempt_id' => $attempt->id, 'payment_operation_id' => $operation->id, 'stripe_refund_id' => $remote->refundId, 'amount_minor' => $remote->amountMinor, 'currency' => strtoupper($remote->currency), 'reason' => $remote->reason, 'status' => $remote->status, 'last_synced_at' => now()]);
             } else {
                 if (in_array($local->status, ['failed', 'canceled'], true) && $local->status !== $remote->status) {
                     throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'A terminal refund changed unexpectedly.');

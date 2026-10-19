@@ -19,6 +19,9 @@ use Nvl\Payments\Models\PaymentRefund;
  */
 final class PaymentRefundFactory extends Factory
 {
+    /** @use PersistsPaymentOwnership<PaymentRefund> */
+    use PersistsPaymentOwnership;
+
     protected $model = PaymentRefund::class;
 
     /**

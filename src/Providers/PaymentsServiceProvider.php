@@ -6,6 +6,7 @@ namespace Nvl\Payments\Providers;
 
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\ServiceProvider;
+use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Payments\Actions\AttachExistingPaymentAction;
 use Nvl\Payments\Actions\CancelAuthorizationAction;
 use Nvl\Payments\Actions\CapturePaymentAction;
@@ -22,11 +23,15 @@ use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Contracts\PaymentOwnerWorklist;
 use Nvl\Payments\Contracts\PaymentReadContract;
 use Nvl\Payments\Contracts\RecoverCheckoutContract;
 use Nvl\Payments\Contracts\RefundPaymentContract;
 use Nvl\Payments\Contracts\ResolvePaymentExceptionContract;
 use Nvl\Payments\Contracts\StartCheckoutContract;
+use Nvl\Payments\Ownership\PaymentsAdoptionAdapter;
+use Nvl\Payments\Ownership\PaymentsResourceRegistrar;
+use Nvl\Payments\Ownership\StoredPaymentOwnerWorklist;
 use Nvl\Payments\Services\DenyExistingPaymentOwnership;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\DenyPaymentOrderProvider;
@@ -38,12 +43,14 @@ use Nvl\Support\Bindings\RequiredBindings;
 use Nvl\Support\Doctor\DoctorCheck;
 use Nvl\Support\Doctor\PackageDoctorContributor;
 use Nvl\Support\Globals\GlobalNames;
+use Nvl\Support\Ownership\Contracts\OwnershipIntegratedProvider;
+use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
 use Stripe\StripeClient;
 
 /** Registers disabled-by-default Payments configuration and migration resources. */
-final class PaymentsServiceProvider extends ServiceProvider
+final class PaymentsServiceProvider extends ServiceProvider implements OwnershipIntegratedProvider
 {
     use MergesPackageConfiguration;
     use RegistersNamespacedResources;
@@ -61,6 +68,12 @@ final class PaymentsServiceProvider extends ServiceProvider
             return PackageDoctorContributor::booleanChecks($report, 'nvl:payments:doctor');
         });
 
+        $this->app->booted(function (): void {
+            (new PaymentsResourceRegistrar)->register($this->app->make(OwnershipResourceRegistry::class), config('nvl-ownership.enabled') === true && config('nvl-payments.ownership.scoped', true) === true);
+            if ($this->app->bound(OwnershipAdoptionRegistry::class)) {
+                $this->app->make(OwnershipAdoptionRegistry::class)->register('payments', PaymentsAdoptionAdapter::class);
+            }
+        });
         $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-payments.php', 'payments');
         $this->app->bindIf(AttachExistingPaymentContract::class, AttachExistingPaymentAction::class);
         $this->app->bindIf(CancelAuthorizationContract::class, CancelAuthorizationAction::class);
@@ -75,6 +88,7 @@ final class PaymentsServiceProvider extends ServiceProvider
             Config::string('nvl-payments.stripe.account_id'),
             Config::boolean('nvl-payments.stripe.livemode'),
         ));
+        $this->app->bindIf(PaymentOwnerWorklist::class, StoredPaymentOwnerWorklist::class);
         $this->app->bindIf(PaymentOrderProvider::class, DenyPaymentOrderProvider::class);
         $this->app->bindIf(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
         $this->app->bindIf(ExistingPaymentOwnership::class, DenyExistingPaymentOwnership::class);

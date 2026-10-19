@@ -37,9 +37,11 @@ use Nvl\Payments\Services\DenyExistingPaymentOwnership;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\DenyPaymentOrderProvider;
 use Nvl\Payments\Services\PaymentOperationJournal;
+use Nvl\Payments\Services\PaymentOrderOwnership;
 use Nvl\Payments\Services\PaymentProjection;
 use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Services\PaymentReconciler;
+use Nvl\Payments\Services\PaymentRefundWriter;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Services\RefundBalance;
 use Nvl\Payments\Services\StripePaymentGateway;
@@ -140,14 +142,14 @@ it('preserves complete native signatures and method documentation', function (st
 
 it('retains the native constructors and private readonly promoted dependencies', function (): void {
     $expected = [
-        AttachExistingPaymentAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['ownership', ExistingPaymentOwnership::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class]],
+        AttachExistingPaymentAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['ownership', ExistingPaymentOwnership::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class], ['scope', PaymentOrderOwnership::class]],
         CancelAuthorizationAction::class => [['operations', AuthorizationOperations::class]],
         CapturePaymentAction::class => [['operations', AuthorizationOperations::class]],
-        RecoverCheckoutAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['reconciler', PaymentReconciler::class]],
-        RefundPaymentAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class], ['balance', RefundBalance::class]],
-        ResolvePaymentExceptionAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class], ['projection', PaymentProjection::class]],
-        StartCheckoutAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class]],
-        PaymentReadService::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['projection', PaymentProjection::class]],
+        RecoverCheckoutAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['reconciler', PaymentReconciler::class], ['scope', PaymentOrderOwnership::class]],
+        RefundPaymentAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class], ['balance', RefundBalance::class], ['scope', PaymentOrderOwnership::class], ['refundWriter', PaymentRefundWriter::class]],
+        ResolvePaymentExceptionAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class], ['projection', PaymentProjection::class], ['scope', PaymentOrderOwnership::class]],
+        StartCheckoutAction::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['gateway', PaymentGateway::class], ['journal', PaymentOperationJournal::class], ['syncer', PaymentStateSyncer::class], ['scope', PaymentOrderOwnership::class]],
+        PaymentReadService::class => [['orders', PaymentOrderProvider::class], ['access', PaymentManagementAccess::class], ['projection', PaymentProjection::class], ['scope', PaymentOrderOwnership::class]],
     ];
     foreach ($expected as $implementation => $parameters) {
         $concrete = new ReflectionClass($implementation);

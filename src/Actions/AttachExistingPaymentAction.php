@@ -19,6 +19,7 @@ use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\PaymentOperationJournal;
+use Nvl\Payments\Services\PaymentOrderOwnership;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 use Nvl\Payments\ValueObjects\StripePaymentState;
@@ -41,12 +42,14 @@ final class AttachExistingPaymentAction implements AttachExistingPaymentContract
         private readonly PaymentGateway $gateway,
         private readonly PaymentOperationJournal $journal,
         private readonly PaymentStateSyncer $syncer,
+        private readonly PaymentOrderOwnership $scope,
     ) {}
 
     /** Attach canonical Stripe facts once after explicit host authorization and ownership proof. */
     public function execute(string $orderReference, Authenticatable $actor, string $stripeReference, string $operationId): PaymentSnapshot
     {
         $order = $this->orders->resolve($orderReference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'attach_existing', $order);
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');

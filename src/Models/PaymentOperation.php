@@ -10,12 +10,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Nvl\Payments\Database\Factories\PaymentOperationFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
+use Nvl\Payments\Models\Concerns\HasPaymentOwnership;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
 
 /**
  * Records one durable Stripe operation and its idempotency identity.
  *
+ * @property string $owner_scope_key
+ * @property string|null $owner_reference
  * @property string $id
  * @property string|null $payment_attempt_id
  * @property string $order_reference
@@ -34,11 +38,12 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @nvl-consumer-read id
  */
-final class PaymentOperation extends Model
+final class PaymentOperation extends Model implements Ownable
 {
     /** @use HasFactory<PaymentOperationFactory> */
     use HasFactory;
 
+    use HasPaymentOwnership;
     use HasUuids;
     use UsesPaymentsConnection;
 

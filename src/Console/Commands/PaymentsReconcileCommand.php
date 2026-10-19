@@ -7,7 +7,10 @@ namespace Nvl\Payments\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Nvl\Payments\Actions\ReconcilePaymentAction;
+use Nvl\Payments\Contracts\PaymentOwnerWorklist;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Support\Ownership\Contracts\OwnershipSystemRunner;
+use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Throwable;
 
 /** Runs a targeted repair or a bounded, paginated sweep of payment attempts. */
@@ -18,7 +21,7 @@ final class PaymentsReconcileCommand extends Command
     protected $description = 'Reconcile order payments with authoritative Stripe facts';
 
     /** Repair attempts while reporting sanitized identifiers and outcomes only. */
-    public function handle(ReconcilePaymentAction $reconcile): int
+    public function handle(ReconcilePaymentAction $reconcile, PaymentOwnerWorklist $worklist, OwnershipSystemRunner $runner, OwnershipResourceRegistry $resources): int
     {
         if (! config()->boolean('nvl-payments.enabled')) {
             $this->error('Payments is disabled.');
@@ -33,6 +36,34 @@ final class PaymentsReconcileCommand extends Command
         }
         $batch = max(1, min(1000, config()->integer('nvl-payments.reconciliation.batch_size', 100)));
         $maximum = max(1, min(10000, config()->integer('nvl-payments.reconciliation.max_attempts', 1000)));
+        $processed = 0;
+        $failed = 0;
+        $remaining = $maximum;
+        if ($resources->get('payments.attempts')->ownership->strategy === 'unscoped') {
+            $counts = $this->reconcileWithinScope($reconcile, $target, $batch, $remaining);
+            $processed = $counts['processed'];
+            $failed = $counts['failed'];
+        } else {
+            foreach ($worklist->owners($target, $maximum) as $owner) {
+                if ($remaining === 0) {
+                    break;
+                }
+                $counts = $runner->runSystem($owner, 'payments.reconcile', fn () => $this->reconcileWithinScope($reconcile, $target, $batch, $remaining));
+                $processed += $counts['processed'];
+                $failed += $counts['failed'];
+                $remaining -= $counts['visited'];
+            }
+        }
+        $this->info($processed.' reconciled; '.$failed.' failed.');
+
+        return $failed > 0 || ($target !== null && $processed === 0) ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** Process a bounded admitted partition without moving scopes or granting provider authority.
+     * @return array{processed:int,failed:int,visited:int}
+     */
+    private function reconcileWithinScope(ReconcilePaymentAction $reconcile, ?string $target, int $batch, int $maximum): array
+    {
         $query = PaymentAttempt::query();
         if ($target !== null) {
             $query->whereKey($target);
@@ -58,8 +89,7 @@ final class PaymentsReconcileCommand extends Command
                 }
             }
         }
-        $this->info($processed.' reconciled; '.$failed.' failed.');
 
-        return $failed > 0 || ($target !== null && $processed === 0) ? self::FAILURE : self::SUCCESS;
+        return ['processed' => $processed, 'failed' => $failed, 'visited' => count($visited)];
     }
 }

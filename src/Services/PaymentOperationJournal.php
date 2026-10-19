@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentOperation;
+use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 
 /**
  * Owns the reusable durable operation boundary, including its atomic transitions.
@@ -16,9 +17,13 @@ use Nvl\Payments\Models\PaymentOperation;
  */
 final class PaymentOperationJournal
 {
+    /** Require actual financial source invariants for durable operations. */
+    public function __construct(private readonly PaymentsIntegrityGuard $integrity) {}
+
     /** Reserve a UUID once, binding all supplied inputs to its immutable identity. */
     public function reserve(string $kind, string $subjectKey, string $operationId, string $actorId, string $fingerprint, ?int $amountMinor): PaymentOperation
     {
+        $this->integrity->assertReady();
         if (! Str::isUuid($operationId) || trim($kind) === '' || trim($subjectKey) === '' || trim($actorId) === '' || trim($fingerprint) === '' || ($amountMinor !== null && $amountMinor <= 0)) {
             throw new InvalidArgumentException('Operation identity and inputs must be valid.');
         }

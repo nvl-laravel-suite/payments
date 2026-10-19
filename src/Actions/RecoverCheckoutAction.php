@@ -11,6 +11,7 @@ use Nvl\Payments\Contracts\RecoverCheckoutContract;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Services\PaymentOrderOwnership;
 use Nvl\Payments\Services\PaymentReconciler;
 use Nvl\Payments\ValueObjects\PaymentSnapshot;
 
@@ -22,13 +23,14 @@ use Nvl\Payments\ValueObjects\PaymentSnapshot;
 final class RecoverCheckoutAction implements RecoverCheckoutContract
 {
     /** Inject host admission and the shared reconciliation boundary. */
-    public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentReconciler $reconciler) {}
+    public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentReconciler $reconciler, private readonly PaymentOrderOwnership $scope) {}
 
     /** Recover a supplied Stripe Session only after host authorization and remote proof. */
     public function execute(string $attemptId, string $stripeSessionId, Authenticatable $actor): PaymentSnapshot
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
+        $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'recover_checkout', $order);
         if ($order->reference !== $attempt->order_reference) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Invalid Checkout recovery order identity.');
