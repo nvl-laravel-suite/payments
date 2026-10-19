@@ -3,12 +3,12 @@
 ## Quickstart
 
 ```sh
-composer require nvl/payments:^5.0
+composer require nvl/payments:^6.0
 php artisan nvl:install payments --dry-run
 php artisan nvl:install payments
 ```
 
-Required NVL dependencies: `nvl/core` (`^5.0`). Bind PaymentOrderProvider, PaymentManagementAccess and ExistingPaymentOwnership before enabling Payments. Resolve prices and ownership from the server; configure the gateway separately.
+Required NVL dependencies: `nvl/core` (`^6.0`). Bind PaymentOrderProvider, PaymentManagementAccess and ExistingPaymentOwnership before enabling Payments. Resolve prices and ownership from the server; configure the gateway separately.
 Review the published common config, select one migration owner, and run schema preflight before existing-table upgrades. The installer does not enable features or run migrations. Follow the detailed installation and capability sections below before invoking a storage/provider operation.
 
 Inject `Nvl\Payments\Contracts\PaymentReadContract` in a host service. After supplying the trusted inputs described above, the first public call is:
@@ -31,7 +31,7 @@ For support, [open an issue](https://github.com/nvl-laravel-suite/payments/issue
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/payments:^5.0` |
+| Installed through | `composer require nvl/payments:^6.0` |
 | Module identifier | `nvl/payments` |
 | PHP namespace | `Nvl\Payments` |
 | Service provider | `Nvl\Payments\Providers\PaymentsServiceProvider` |
@@ -41,14 +41,14 @@ For support, [open an issue](https://github.com/nvl-laravel-suite/payments/issue
 
 Payments owns Checkout attempts, authorizations, captures, cancellations, attached Stripe payments, refunds, signed webhooks, reconciliation, and an order payment timeline. The host owns Orders, calculated amounts, customer admission, management authorization, fulfillment, and UI. A Checkout return URL does not prove payment; use confirmed package state and its after-commit `PaymentStateChanged` event. This package makes no money movement until explicitly configured and enabled.
 
-Payments requires PHP 8.4, Laravel 12–13, `nvl/core:^5.0`, and Stripe PHP. It has no dependency on Tenancy, Billing, or Cashier. It does not register Cashier models or change Cashier routes. The optional `nvl/billing` package handles tenant subscriptions separately; both may coexist with separate webhook URLs and signing secrets. The suite metapackage does not install Payments.
+Payments requires PHP 8.4, Laravel 12–13, `nvl/core:^6.0`, and Stripe PHP. It has no dependency on Tenancy, Billing, or Cashier. It does not register Cashier models or change Cashier routes. The optional `nvl/billing` package handles tenant subscriptions separately; both may coexist with separate webhook URLs and signing secrets. The suite metapackage does not install Payments.
 
 ## Requirements and installation
 
 After its first public mirror tag is indexed on Packagist, install the published package in the host Laravel application:
 
 ```bash
-composer require nvl/payments:^5.0
+composer require nvl/payments:^6.0
 php artisan vendor:publish --tag=nvl-payments-translations
 php artisan vendor:publish --tag=nvl-payments-config
 php artisan vendor:publish --tag=nvl-payments-skills
