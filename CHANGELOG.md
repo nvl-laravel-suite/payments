@@ -7,6 +7,10 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [6.0.0] - 2026-10-20
 
+### Release fixes
+
+- Include the existing native ownership default in published common configuration.
+
 ### Changed
 
 - Support native owner declarations and captured provider workflows without a Tenancy dependency. Preserve order/payment identities, webhook idempotency, host policies and explicit adoption.
