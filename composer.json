@@ -23,7 +23,7 @@
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
-        "nvl/ownership": "^6.0",
+        "nvl/ownership": "^6.0.1",
         "nvl/tenancy": "^6.0",
         "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^4.0",
@@ -108,6 +108,6 @@
         "nvl/ownership": "Adds optional model-declared ownership, isolation, adoption and captured worker contexts."
     },
     "conflict": {
-        "nvl/ownership": "<6.0 || >=7.0"
+        "nvl/ownership": "<6.0.1 || >=7.0"
     }
 }
