@@ -11,7 +11,9 @@ use Nvl\Support\Exceptions\ExceptionResponse;
 use Nvl\Support\Traits\InteractsWithPackageFailure;
 use Throwable;
 
-/** Expected Payments domain, configuration and infrastructure failures.
+/**
+ * Expected Payments domain, configuration and infrastructure failures.
+ *
  * @api
  */
 class PaymentsException extends DomainException implements RespondableException

@@ -11,7 +11,11 @@ use Nvl\Support\Ownership\Contracts\OwnershipReadiness;
 use Nvl\Support\Ownership\Services\OwnershipConstraintInspector;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 
-/** Requires live immutable provider and native financial graph constraints before effects. @internal */
+/**
+ * Requires live immutable provider and native financial graph constraints before effects.
+ *
+ * @internal
+ */
 final readonly class PaymentsIntegrityGuard
 {
     public const array Unique = [

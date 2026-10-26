@@ -12,7 +12,11 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Support\Ownership\ValueObjects\OwnershipResourceDefinition;
 
-/** Declares independently captured payment facts and inherited refund ownership. @internal */
+/**
+ * Declares independently captured payment facts and inherited refund ownership.
+ *
+ * @internal
+ */
 final readonly class PaymentsResourceRegistrar
 {
     /** Register the exact owned graph without requiring a host order table or tenant lifecycle. */

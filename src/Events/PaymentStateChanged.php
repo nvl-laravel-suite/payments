@@ -6,7 +6,9 @@ namespace Nvl\Payments\Events;
 
 use Nvl\Support\Contracts\DomainEvent;
 
-/** Committed financial facts for a host-owned order and its payment attempt. *
+/**
+ * Committed financial facts for a host-owned order and its payment attempt. *
+ *
  * @api
  */
 final readonly class PaymentStateChanged implements DomainEvent

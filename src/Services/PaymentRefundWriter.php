@@ -7,7 +7,11 @@ namespace Nvl\Payments\Services;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 
-/** Persists refund reservations and reconciled facts through the canonical source payment assignment. @internal */
+/**
+ * Persists refund reservations and reconciled facts through the canonical source payment assignment.
+ *
+ * @internal
+ */
 final readonly class PaymentRefundWriter
 {
     /** Retain the neutral source writer without retaining any financial record. */

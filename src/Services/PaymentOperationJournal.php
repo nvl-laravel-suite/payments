@@ -14,6 +14,8 @@ use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 /**
  * Owns the reusable durable operation boundary, including its atomic transitions.
  * Transactions here are intentional: all financial actions share this recovery journal.
+ *
+ * @internal
  */
 final class PaymentOperationJournal
 {

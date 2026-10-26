@@ -12,7 +12,11 @@ use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\PaymentAttempt;
 use PDOException;
 
-/** Reports local deployment prerequisites using boolean checks without disclosing secrets. */
+/**
+ * Reports local deployment prerequisites using boolean checks without disclosing secrets.
+ *
+ * @internal
+ */
 final class PaymentsDoctor
 {
     /** Initialize the package-owned inspection dependencies. */

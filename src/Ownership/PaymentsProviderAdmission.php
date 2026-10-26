@@ -13,7 +13,11 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnerReference;
 use Stripe\Event;
 
-/** Resolves immutable stored payment identity only after the ingress verifies signature, account and mode. @internal */
+/**
+ * Resolves immutable stored payment identity only after the ingress verifies signature, account and mode.
+ *
+ * @internal
+ */
 final readonly class PaymentsProviderAdmission
 {
     /** Retain fixed correlation inspection and named owner admission capabilities. */

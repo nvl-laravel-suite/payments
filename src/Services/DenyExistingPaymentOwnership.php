@@ -12,6 +12,8 @@ use Nvl\Support\Exceptions\BindingRequiredException;
  * Refuses imports until the host proves ownership of the Stripe payment.
  *
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
+ *
+ * @internal
  */
 final class DenyExistingPaymentOwnership implements ExistingPaymentOwnership
 {

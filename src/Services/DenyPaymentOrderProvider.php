@@ -8,7 +8,11 @@ use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Exceptions\BindingRequiredException;
 
-/** Refuses order resolution until the host supplies its trusted adapter. */
+/**
+ * Refuses order resolution until the host supplies its trusted adapter.
+ *
+ * @internal
+ */
 final class DenyPaymentOrderProvider implements PaymentOrderProvider
 {
     /** Deny resolution without a host order provider. */

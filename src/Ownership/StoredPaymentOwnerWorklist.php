@@ -11,7 +11,11 @@ use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipContextResolver;
 use Nvl\Support\Ownership\ValueObjects\OwnerReference;
 
-/** Projects only source owner identity; it cannot expose financial data or admit an operation. @internal */
+/**
+ * Projects only source owner identity; it cannot expose financial data or admit an operation.
+ *
+ * @internal
+ */
 final readonly class StoredPaymentOwnerWorklist implements PaymentOwnerWorklist
 {
     /** Retain current-context lookup and live source integrity checks. */

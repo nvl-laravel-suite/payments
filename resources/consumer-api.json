@@ -163,7 +163,6 @@
             "kind": "class",
             "file": "src/Models/PaymentAttempt.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -208,7 +207,6 @@
             "kind": "class",
             "file": "src/Models/PaymentOperation.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -244,7 +242,6 @@
             "kind": "class",
             "file": "src/Models/PaymentRefund.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -280,7 +277,6 @@
             "kind": "class",
             "file": "src/Models/PaymentWebhookEvent.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",

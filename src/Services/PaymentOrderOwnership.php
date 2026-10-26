@@ -13,7 +13,11 @@ use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipContextResolver;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 
-/** Binds trusted order facts to actual producer admission without treating an order claim as authority. @internal */
+/**
+ * Binds trusted order facts to actual producer admission without treating an order claim as authority.
+ *
+ * @internal
+ */
 final readonly class PaymentOrderOwnership
 {
     /** Retain neutral runtime capabilities, never a cached owner or host order. */

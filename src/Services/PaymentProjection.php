@@ -13,6 +13,8 @@ use Nvl\Payments\Models\PaymentRefund;
  *
  * @phpstan-type PaymentSnapshot array{attemptId:string, orderReference:string, orderRevision:string, amountMinor:int, capturedAmountMinor:int, refundedAmountMinor:int, currency:string, status:string, origin:string, checkoutSessionId:?string, paymentIntentId:?string, chargeId:?string, accountId:?string, livemode:?bool, captureMethod:?string, expiresAt:?\Carbon\CarbonImmutable, lastSyncedAt:?\Carbon\CarbonImmutable, reservedRefundAmountMinor:int, refundableAmountMinor:int}
  * @phpstan-type RefundSnapshot array{refundId:string, paymentAttemptId:string, operationId:string, amountMinor:int, currency:string, reason:?string, status:string, stripeRefundId:?string, lastSyncedAt:?\Carbon\CarbonImmutable}
+ *
+ * @internal
  */
 final class PaymentProjection
 {

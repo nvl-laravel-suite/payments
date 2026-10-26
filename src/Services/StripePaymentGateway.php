@@ -22,6 +22,8 @@ use UnexpectedValueException;
  * @phpstan-import-type StripeCheckoutState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
+ *
+ * @internal
  */
 final class StripePaymentGateway implements PaymentGateway
 {

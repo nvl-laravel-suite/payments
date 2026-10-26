@@ -18,6 +18,8 @@ use Nvl\Support\Events\DomainEventDispatcher;
  *
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
+ *
+ * @internal
  */
 final class PaymentStateSyncer
 {

@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Ownership;
 
-/** Names the closed provider event-to-persisted-payment correlation fields. @internal */
+/**
+ * Names the closed provider event-to-persisted-payment correlation fields.
+ *
+ * @internal
+ */
 final readonly class PaymentProviderCorrelation
 {
     /** Select the stored identity field without consulting event metadata or ambient owners. */

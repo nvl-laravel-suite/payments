@@ -6,7 +6,9 @@ namespace Nvl\Payments\Enums;
 
 use Nvl\Support\Contracts\ResponseCode;
 
-/** Stable public response codes for Payments.
+/**
+ * Stable public response codes for Payments.
+ *
  * @api
  */
 enum PaymentsResponseCode: string implements ResponseCode

@@ -9,7 +9,11 @@ use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Exceptions\BindingRequiredException;
 
-/** Refuses every management operation until the host supplies authorization. */
+/**
+ * Refuses every management operation until the host supplies authorization.
+ *
+ * @internal
+ */
 final class DenyPaymentManagementAccess implements PaymentManagementAccess
 {
     /** Deny the requested payment operation without host authorization. */

@@ -49,7 +49,7 @@ final class FakePaymentGateway implements PaymentGateway
             'successUrl' => $successUrl,
             'cancelUrl' => $cancelUrl,
             'expiresAt' => $expiresAt,
-            'idempotencyKey' => $idempotencyKey,
+            'idempotency_key' => $idempotencyKey,
         ]);
 
         return $this->hostedCheckout($result);
@@ -60,7 +60,7 @@ final class FakePaymentGateway implements PaymentGateway
      */
     public function expireCheckout(string $sessionId, string $idempotencyKey): void
     {
-        $this->invoke('expireCheckout', ['sessionId' => $sessionId, 'idempotencyKey' => $idempotencyKey]);
+        $this->invoke('expireCheckout', ['sessionId' => $sessionId, 'idempotency_key' => $idempotencyKey]);
     }
 
     /**
@@ -109,7 +109,7 @@ final class FakePaymentGateway implements PaymentGateway
         $result = $this->invoke('capture', [
             'paymentIntentId' => $paymentIntentId,
             'amountMinor' => $amountMinor,
-            'idempotencyKey' => $idempotencyKey,
+            'idempotency_key' => $idempotencyKey,
         ]);
 
         return $this->paymentState($result);
@@ -124,7 +124,7 @@ final class FakePaymentGateway implements PaymentGateway
     {
         $result = $this->invoke('cancel', [
             'paymentIntentId' => $paymentIntentId,
-            'idempotencyKey' => $idempotencyKey,
+            'idempotency_key' => $idempotencyKey,
         ]);
 
         return $this->paymentState($result);
@@ -141,7 +141,7 @@ final class FakePaymentGateway implements PaymentGateway
             'paymentId' => $paymentId,
             'amountMinor' => $amountMinor,
             'reason' => $reason,
-            'idempotencyKey' => $idempotencyKey,
+            'idempotency_key' => $idempotencyKey,
         ]);
 
         return $this->refundState($result);
