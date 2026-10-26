@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
-use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
@@ -28,7 +27,7 @@ it('discovers the package without activating routes or vendor migrations', funct
         ->and(config('nvl-payments.connection'))->toBeNull()
         ->and(Route::getRoutes()->getByName('nvl.payments.webhook'))->toBeNull()
         ->and(Schema::hasTable(PaymentsTables::Attempts))->toBeFalse()
-        ->and($loaded)->toHaveKeys([SupportServiceProvider::class, DataServiceProvider::class, PaymentsServiceProvider::class])
+        ->and($loaded)->toHaveKeys([SupportServiceProvider::class, PaymentsServiceProvider::class])
         ->not->toHaveKeys(['Nvl\\Billing\\Providers\\BillingServiceProvider', 'Nvl\\Tenancy\\Providers\\TenancyServiceProvider']);
 });
 
@@ -83,7 +82,7 @@ it('resolves the default gateway from Payments credentials account and mode', fu
         $gateway = app(PaymentGateway::class);
         expect($gateway)->toBeInstanceOf(StripePaymentGateway::class);
         $state = $gateway->payment('pi_configured');
-        expect($state->accountId)->toBe('acct_configured')->and($state->livemode)->toBeTrue();
+        expect($state['accountId'])->toBe('acct_configured')->and($state['livemode'])->toBeTrue();
     } finally {
         ApiRequestor::setHttpClient(new CurlClient);
     }

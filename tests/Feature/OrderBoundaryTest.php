@@ -8,7 +8,6 @@ use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Tests\PaymentsTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Support\Exceptions\BindingRequiredException;
 
 uses(PaymentsTestCase::class);
@@ -37,11 +36,7 @@ it('denies order resolution and management without host bindings', function (): 
 });
 
 it('denies imported payment ownership without a host binding', function (): void {
-    $payment = new StripePaymentState(
-        paymentIntentId: 'pi_123', chargeId: 'ch_123', accountId: 'acct_123', livemode: false,
-        amountMinor: 1299, capturedAmountMinor: 1299, refundedAmountMinor: 0,
-        currency: 'JPY', status: 'succeeded', captureMethod: 'automatic',
-    );
+    $payment = ['paymentIntentId' => 'pi_123', 'chargeId' => 'ch_123', 'accountId' => 'acct_123', 'livemode' => false, 'amountMinor' => 1299, 'capturedAmountMinor' => 1299, 'refundedAmountMinor' => 0, 'currency' => 'JPY', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
 
     expect(fn () => app(ExistingPaymentOwnership::class)->assertOwned(paymentOrderSnapshot(), $payment))
         ->toThrow(BindingRequiredException::class);

@@ -7,13 +7,12 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\Actor;
 use Nvl\Ownership\Tests\Fixtures\Company;
-use Nvl\Payments\Actions\StartCheckoutAction;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Testing\FakePaymentGateway;
+use Nvl\Payments\Tests\Fixtures\StartCheckoutAction;
 use Nvl\Payments\Tests\OwnerScopeTestCase;
-use Nvl\Payments\ValueObjects\HostedCheckout;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
@@ -37,12 +36,12 @@ beforeEach(function (): void {
 it('keeps equal host order references and their reservation keys separate across native owners', function (): void {
     $gateway = FakePaymentGateway::fake(app());
     foreach ([7, 8] as $key) {
-        $gateway->willReturn('createCheckout', new HostedCheckout('cs_native_'.$key, 'https://example.test/checkout/'.$key, CarbonImmutable::now()->addHour()));
+        $gateway->willReturn('createCheckout', ['sessionId' => 'cs_native_'.$key, 'url' => 'https://example.test/checkout/'.$key, 'expiresAt' => CarbonImmutable::now()->addHour()]);
     }
     $attempts = [];
     foreach ([7, 8] as $key) {
         $attempts[$key] = app(OwnershipRunner::class)->run(Company::query()->findOrFail($key), Actor::query()->findOrFail(1), function () use ($key) {
-            expect(app(StartCheckoutAction::class)->execute('same-order', Actor::query()->findOrFail(1), 'https://example.test/success', 'https://example.test/cancel')->sessionId)->toBe('cs_native_'.$key);
+            expect(app(StartCheckoutAction::class)->execute('same-order', Actor::query()->findOrFail(1), 'https://example.test/success', 'https://example.test/cancel')['sessionId'])->toBe('cs_native_'.$key);
 
             return PaymentAttempt::query()->sole();
         });

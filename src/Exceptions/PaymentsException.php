@@ -30,7 +30,7 @@ class PaymentsException extends DomainException implements RespondableException
         $exception = new self($diagnosticMessage, previous: $previous);
         $status = match ($code) {
             PaymentsResponseCode::FeatureDisabled => 404,
-            PaymentsResponseCode::TenantInactive, PaymentsResponseCode::CheckoutConflict, PaymentsResponseCode::SubscriptionConflict,
+            PaymentsResponseCode::CheckoutConflict,
             PaymentsResponseCode::ProviderIdentityMismatch, PaymentsResponseCode::OperationConflict, PaymentsResponseCode::PaymentStateInvalid,
             PaymentsResponseCode::ReconciliationRequired => 409,
             PaymentsResponseCode::InvalidConfiguration, PaymentsResponseCode::StorageUnavailable => 500,

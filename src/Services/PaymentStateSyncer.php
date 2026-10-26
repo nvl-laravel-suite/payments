@@ -11,18 +11,25 @@ use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Events\DomainEventDispatcher;
 
-/** Reusable transactional write boundary for authoritative Stripe financial facts. */
+/**
+ * Reusable transactional write boundary for authoritative Stripe financial facts.
+ *
+ * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
+ */
 final class PaymentStateSyncer
 {
     /** Retain the source-aware domain event dispatcher. */
     public function __construct(private DomainEventDispatcher $domainEvents, private PaymentsIntegrityGuard $integrity) {}
 
-    /** Synchronize only a previously correlated payment and notify after its connection commits. */
-    public function sync(StripePaymentState $payment): void
+    /**
+     * Synchronize only a previously correlated payment and notify after its connection commits.
+     *
+     * @param  StripePaymentState  $payment
+     */
+    public function sync(array $payment): void
     {
         $this->integrity->assertReady();
         $this->apply($payment, false);
@@ -33,32 +40,37 @@ final class PaymentStateSyncer
      * Callers hold the attempt lock and reject changes since their remote observation.
      *
      * @param  list<StripeRefundState>  $refunds
+     * @param  StripePaymentState  $payment
      */
-    public function reconcile(StripePaymentState $payment, array $refunds): void
+    public function reconcile(array $payment, array $refunds): void
     {
         $this->integrity->assertReady();
         $succeeded = 0;
         foreach ($refunds as $refund) {
-            if ($refund->status === 'succeeded') {
-                $succeeded += $refund->amountMinor;
+            if ($refund['status'] === 'succeeded') {
+                $succeeded += $refund['amountMinor'];
             }
         }
-        $this->apply($payment, $succeeded === $payment->refundedAmountMinor);
+        $this->apply($payment, $succeeded === $payment['refundedAmountMinor']);
     }
 
-    /** Apply validated facts while preserving ordinary webhook monotonicity. */
-    private function apply(StripePaymentState $payment, bool $allowRefundDecrease): void
+    /**
+     * Apply validated facts while preserving ordinary webhook monotonicity.
+     *
+     * @param  StripePaymentState  $payment
+     */
+    private function apply(array $payment, bool $allowRefundDecrease): void
     {
-        if ($payment->paymentIntentId === null && $payment->chargeId === null) {
+        if ($payment['paymentIntentId'] === null && $payment['chargeId'] === null) {
             return;
         }
         $connection = (new PaymentAttempt)->getConnection();
         $connection->transaction(function () use ($payment, $connection, $allowRefundDecrease): void {
             $query = PaymentAttempt::query();
-            if ($payment->paymentIntentId !== null) {
-                $query->where('stripe_payment_intent_id', $payment->paymentIntentId);
+            if ($payment['paymentIntentId'] !== null) {
+                $query->where('stripe_payment_intent_id', $payment['paymentIntentId']);
             } else {
-                $query->where('stripe_charge_id', $payment->chargeId);
+                $query->where('stripe_charge_id', $payment['chargeId']);
             }
             $attempt = $query->lockForUpdate()->first();
             if ($attempt === null) {
@@ -70,19 +82,19 @@ final class PaymentStateSyncer
                 return;
             }
             // Concurrent reads may complete in reverse order; settled money must never regress.
-            if ($payment->capturedAmountMinor < $attempt->captured_amount_minor || (! $allowRefundDecrease && $payment->refundedAmountMinor < $attempt->refunded_amount_minor)
+            if ($payment['capturedAmountMinor'] < $attempt->captured_amount_minor || (! $allowRefundDecrease && $payment['refundedAmountMinor'] < $attempt->refunded_amount_minor)
                 || ($attempt->state === 'canceled' && $state !== 'canceled')
                 || ($attempt->state === 'authorized' && in_array($state, ['open', 'processing', 'failed'], true))) {
                 return;
             }
             $state = $attempt->state === 'payment_exception' ? 'payment_exception' : $state;
             $oldState = $attempt->state;
-            $changed = $oldState !== $state || $attempt->captured_amount_minor !== $payment->capturedAmountMinor || $attempt->refunded_amount_minor !== $payment->refundedAmountMinor;
+            $changed = $oldState !== $state || $attempt->captured_amount_minor !== $payment['capturedAmountMinor'] || $attempt->refunded_amount_minor !== $payment['refundedAmountMinor'];
             $attempt->fill([
-                'state' => $state, 'stripe_payment_intent_id' => $payment->paymentIntentId,
-                'stripe_charge_id' => $payment->chargeId, 'stripe_account_id' => $payment->accountId,
-                'stripe_livemode' => $payment->livemode, 'capture_method' => $payment->captureMethod,
-                'captured_amount_minor' => $payment->capturedAmountMinor, 'refunded_amount_minor' => $payment->refundedAmountMinor,
+                'state' => $state, 'stripe_payment_intent_id' => $payment['paymentIntentId'],
+                'stripe_charge_id' => $payment['chargeId'], 'stripe_account_id' => $payment['accountId'],
+                'stripe_livemode' => $payment['livemode'], 'capture_method' => $payment['captureMethod'],
+                'captured_amount_minor' => $payment['capturedAmountMinor'], 'refunded_amount_minor' => $payment['refundedAmountMinor'],
                 'last_synced_at' => now(),
             ]);
             if ($state === 'canceled') {
@@ -90,33 +102,41 @@ final class PaymentStateSyncer
             }
             $attempt->save();
             if ($changed) {
-                $event = new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, $state, $payment->paymentIntentId, $payment->chargeId, $attempt->stripe_checkout_session_id);
+                $event = new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, $state, $payment['paymentIntentId'], $payment['chargeId'], $attempt->stripe_checkout_session_id);
                 $this->domainEvents->dispatch($event, $connection);
             }
         });
     }
 
-    /** Reject mismatched identities and impossible financial amounts before persistence. */
-    public function assertMatches(PaymentAttempt $attempt, StripePaymentState $payment): void
+    /**
+     * Reject mismatched identities and impossible financial amounts before persistence.
+     *
+     * @param  StripePaymentState  $payment
+     */
+    public function assertMatches(PaymentAttempt $attempt, array $payment): void
     {
-        if ($payment->accountId !== Config::get('nvl-payments.stripe.account_id') || $payment->livemode !== Config::get('nvl-payments.stripe.livemode')
-            || ($attempt->stripe_account_id !== null && $attempt->stripe_account_id !== $payment->accountId)
-            || ($attempt->stripe_livemode !== null && $attempt->stripe_livemode !== $payment->livemode)
-            || ($attempt->stripe_payment_intent_id !== null && $attempt->stripe_payment_intent_id !== $payment->paymentIntentId)
-            || ($attempt->stripe_charge_id !== null && $attempt->stripe_charge_id !== $payment->chargeId && $attempt->captured_amount_minor > 0)
-            || ($attempt->capture_method !== null && $attempt->capture_method !== $payment->captureMethod)
-            || $attempt->amount_minor !== $payment->amountMinor || strtolower($attempt->currency) !== strtolower($payment->currency)
-            || $payment->capturedAmountMinor < 0 || $payment->capturedAmountMinor > $payment->amountMinor
-            || $payment->refundedAmountMinor < 0 || $payment->refundedAmountMinor > $payment->capturedAmountMinor) {
+        if ($payment['accountId'] !== Config::get('nvl-payments.stripe.account_id') || $payment['livemode'] !== Config::get('nvl-payments.stripe.livemode')
+            || ($attempt->stripe_account_id !== null && $attempt->stripe_account_id !== $payment['accountId'])
+            || ($attempt->stripe_livemode !== null && $attempt->stripe_livemode !== $payment['livemode'])
+            || ($attempt->stripe_payment_intent_id !== null && $attempt->stripe_payment_intent_id !== $payment['paymentIntentId'])
+            || ($attempt->stripe_charge_id !== null && $attempt->stripe_charge_id !== $payment['chargeId'] && $attempt->captured_amount_minor > 0)
+            || ($attempt->capture_method !== null && $attempt->capture_method !== $payment['captureMethod'])
+            || $attempt->amount_minor !== $payment['amountMinor'] || strtolower($attempt->currency) !== strtolower($payment['currency'])
+            || $payment['capturedAmountMinor'] < 0 || $payment['capturedAmountMinor'] > $payment['amountMinor']
+            || $payment['refundedAmountMinor'] < 0 || $payment['refundedAmountMinor'] > $payment['capturedAmountMinor']) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe payment does not match the reserved attempt.');
         }
     }
 
-    /** Map provider financial status without trusting an event's historic payload. */
-    private function state(StripePaymentState $payment): ?string
+    /**
+     * Map provider financial status without trusting an event's historic payload.
+     *
+     * @param  StripePaymentState  $payment
+     */
+    private function state(array $payment): ?string
     {
-        return match ($payment->status) {
-            'succeeded' => $payment->refundedAmountMinor > 0 ? ($payment->refundedAmountMinor === $payment->capturedAmountMinor ? 'refunded' : 'partially_refunded') : 'captured',
+        return match ($payment['status']) {
+            'succeeded' => $payment['refundedAmountMinor'] > 0 ? ($payment['refundedAmountMinor'] === $payment['capturedAmountMinor'] ? 'refunded' : 'partially_refunded') : 'captured',
             'requires_capture' => 'authorized',
             'processing' => 'processing',
             'requires_payment_method', 'failed' => 'failed',

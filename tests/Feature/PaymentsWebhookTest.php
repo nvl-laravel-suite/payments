@@ -11,8 +11,6 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
-use Nvl\Payments\ValueObjects\StripeCheckoutState;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
 uses(PaymentsSchemaTestCase::class);
@@ -24,9 +22,9 @@ function webhookAttempt(array $attributes = []): PaymentAttempt
 }
 
 /** @param array<string, mixed> $attributes */
-function webhookPayment(array $attributes = []): StripePaymentState
+function webhookPayment(array $attributes = []): array
 {
-    return new StripePaymentState(...array_replace(['paymentIntentId' => 'pi_one', 'chargeId' => 'ch_one', 'accountId' => 'acct_one', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic'], $attributes));
+    return array_replace(['amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null], array_replace(['paymentIntentId' => 'pi_one', 'chargeId' => 'ch_one', 'accountId' => 'acct_one', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic'], $attributes));
 }
 
 /** @param array<string, mixed> $attributes */
@@ -61,7 +59,7 @@ it('rejects missing invalid stale and malformed signatures or bodies', function 
 it('synchronizes authoritative state once for duplicate signed deliveries', function (): void {
     $attempt = webhookAttempt();
     Event::fake([PaymentStateChanged::class]);
-    $this->gateway->shouldReceive('payment')->once()->with('pi_one')->andReturnUsing(function (): StripePaymentState {
+    $this->gateway->shouldReceive('payment')->once()->with('pi_one')->andReturnUsing(function (): array {
         expect((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0);
 
         return webhookPayment();
@@ -101,7 +99,7 @@ it('maps processing failure and manual authorization from fresh Stripe facts', f
 
 it('correlates async Checkout success and failure through a known Session', function (string $type, string $status, string $state, int $captured): void {
     $attempt = webhookAttempt(['stripe_payment_intent_id' => null]);
-    $this->gateway->shouldReceive('checkout')->once()->with('cs_one')->andReturn(new StripeCheckoutState('cs_one', 'pi_one', 'acct_one', false, 1000, 'eur', 'complete', 'unpaid', 'order-1', 'v1', CarbonImmutable::now()));
+    $this->gateway->shouldReceive('checkout')->once()->with('cs_one')->andReturn(['sessionId' => 'cs_one', 'paymentIntentId' => 'pi_one', 'accountId' => 'acct_one', 'livemode' => false, 'amountMinor' => 1000, 'currency' => 'eur', 'status' => 'complete', 'paymentStatus' => 'unpaid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now(), 'operationKey' => null, 'url' => null]);
     $this->gateway->shouldReceive('payment')->once()->with('pi_one')->andReturn(webhookPayment(['status' => $status, 'capturedAmountMinor' => $captured]));
     deliverWebhook(webhookPayload(['type' => $type, 'data' => ['object' => ['id' => 'cs_one', 'object' => 'checkout.session']]]))->assertOk();
     expect($attempt->refresh()->state)->toBe($state)->and($attempt->stripe_payment_intent_id)->toBe('pi_one');
@@ -145,7 +143,7 @@ it('dispatches only after the outer commit and discards rolled back notification
 
 it('accepts a reserved Session whose account is not yet synchronized', function (): void {
     $attempt = webhookAttempt(['stripe_payment_intent_id' => null, 'stripe_account_id' => null, 'stripe_livemode' => null]);
-    $this->gateway->shouldReceive('checkout')->once()->andReturn(new StripeCheckoutState('cs_one', 'pi_one', 'acct_one', false, 1000, 'eur', 'complete', 'paid', 'order-1', 'v1', CarbonImmutable::now()));
+    $this->gateway->shouldReceive('checkout')->once()->andReturn(['sessionId' => 'cs_one', 'paymentIntentId' => 'pi_one', 'accountId' => 'acct_one', 'livemode' => false, 'amountMinor' => 1000, 'currency' => 'eur', 'status' => 'complete', 'paymentStatus' => 'paid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now(), 'operationKey' => null, 'url' => null]);
     $this->gateway->shouldReceive('payment')->once()->andReturn(webhookPayment());
     deliverWebhook(webhookPayload(['type' => 'checkout.session.completed', 'data' => ['object' => ['id' => 'cs_one']]]))->assertOk();
     expect($attempt->refresh()->state)->toBe('captured');
@@ -164,10 +162,10 @@ it('cannot regress a settled snapshot when a concurrent read finishes late', fun
 
 it('never links a PaymentIntent from a mismatched Session', function (string $field, mixed $value): void {
     $attempt = webhookAttempt(['stripe_payment_intent_id' => null]);
-    $session = new StripeCheckoutState('cs_one', 'pi_one', 'acct_one', false, 1000, 'eur', 'complete', 'paid', 'order-1', 'v1', CarbonImmutable::now());
-    $attributes = get_object_vars($session);
+    $session = ['sessionId' => 'cs_one', 'paymentIntentId' => 'pi_one', 'accountId' => 'acct_one', 'livemode' => false, 'amountMinor' => 1000, 'currency' => 'eur', 'status' => 'complete', 'paymentStatus' => 'paid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now(), 'operationKey' => null, 'url' => null];
+    $attributes = $session;
     $attributes[$field] = $value;
-    $this->gateway->shouldReceive('checkout')->once()->andReturn(new StripeCheckoutState(...$attributes));
+    $this->gateway->shouldReceive('checkout')->once()->andReturn(array_replace(['operationKey' => null, 'url' => null], $attributes));
     $this->gateway->shouldReceive('payment')->once()->andReturn(webhookPayment());
     deliverWebhook(webhookPayload(['type' => 'checkout.session.completed', 'data' => ['object' => ['id' => 'cs_one']]]))->assertStatus(400);
     expect($attempt->refresh()->stripe_payment_intent_id)->toBeNull()->and($attempt->state)->toBe('open');

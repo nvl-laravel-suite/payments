@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Services;
 
-use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use InvalidArgumentException;
@@ -15,15 +14,17 @@ use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
-use Nvl\Payments\ValueObjects\PaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Throwable;
 
 /**
  * Owns the shared durable boundary for mutually exclusive authorization operations.
  * Transactions intentionally live here so capture and cancellation share one claim protocol.
+ *
+ * @api
+ *
+ * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  */
-final class AuthorizationOperations
+final class PaymentAuthorizations
 {
     /** Inject trusted host admission, Stripe facts, and durable payment state boundaries. */
     public function __construct(
@@ -35,8 +36,20 @@ final class AuthorizationOperations
         private readonly PaymentOrderOwnership $scope,
     ) {}
 
+    /** Capture an authorized payment for the exact integer amount. */
+    public function capture(PaymentAttempt|string $attempt, int $amountMinor, string $operationId, Authenticatable $actor): PaymentAttempt
+    {
+        return $this->execute('capture', $attempt instanceof PaymentAttempt ? $attempt->id : $attempt, $actor, $amountMinor, $operationId);
+    }
+
+    /** Cancel an uncaptured authorization. */
+    public function cancel(PaymentAttempt|string $attempt, string $operationId, Authenticatable $actor): PaymentAttempt
+    {
+        return $this->execute('cancel_authorization', $attempt instanceof PaymentAttempt ? $attempt->id : $attempt, $actor, null, $operationId);
+    }
+
     /** Reserve one final authorization operation before making remote calls outside transactions. */
-    public function execute(string $kind, string $attemptId, Authenticatable $actor, ?int $amountMinor, string $operationId): PaymentSnapshot
+    private function execute(string $kind, string $attemptId, Authenticatable $actor, ?int $amountMinor, string $operationId): PaymentAttempt
     {
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
@@ -83,7 +96,7 @@ final class AuthorizationOperations
             return $operation;
         }, 5);
         if (! $operation->wasRecentlyCreated) {
-            return $this->snapshot($attempt->refresh());
+            return $attempt->refresh();
         }
         try {
             $intentId = $attempt->stripe_payment_intent_id ?? throw new DomainException('Missing PaymentIntent.');
@@ -94,8 +107,8 @@ final class AuthorizationOperations
                 ? $this->gateway->capture($intentId, $amountMinor, $operation->idempotency_key)
                 : $this->gateway->cancel($intentId, $operation->idempotency_key);
             $this->syncer->assertMatches($attempt, $result);
-            if (($kind === 'capture' && ($result->status !== 'succeeded' || $result->capturedAmountMinor !== $amountMinor || $result->amountCapturableMinor !== 0))
-                || ($kind === 'cancel_authorization' && ($result->status !== 'canceled' || $result->capturedAmountMinor !== 0 || $result->amountCapturableMinor !== 0))) {
+            if (($kind === 'capture' && ($result['status'] !== 'succeeded' || $result['capturedAmountMinor'] !== $amountMinor || $result['amountCapturableMinor'] !== 0))
+                || ($kind === 'cancel_authorization' && ($result['status'] !== 'canceled' || $result['capturedAmountMinor'] !== 0 || $result['amountCapturableMinor'] !== 0))) {
                 throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Stripe did not confirm the requested final authorization operation.');
             }
             $connection->transaction(function () use ($result, $operation, $intentId): void {
@@ -103,31 +116,24 @@ final class AuthorizationOperations
                 $this->journal->complete($operation, $intentId);
             }, 5);
 
-            return $this->snapshot($attempt->refresh());
+            return $attempt->refresh();
         } catch (Throwable $exception) {
             $this->journal->markUnknown($operation);
             throw $exception;
         }
     }
 
-    /** Reject partial, previously captured, unsupported, or unavailable authorizations. */
-    private function assertSupported(StripePaymentState $payment): void
+    /**
+     * Reject partial, previously captured, unsupported, or unavailable authorizations.
+     *
+     * @param  StripePaymentState  $payment
+     */
+    private function assertSupported(array $payment): void
     {
-        if ($payment->status !== 'requires_capture' || $payment->captureMethod !== 'manual' || $payment->paymentMethodType !== 'card'
-            || $payment->capturedAmountMinor !== 0 || $payment->refundedAmountMinor !== 0 || $payment->amountCapturableMinor !== $payment->amountMinor
-            || ($payment->partialAuthorizationStatus !== null && ! in_array($payment->partialAuthorizationStatus, ['fully_authorized', 'not_requested'], true))) {
+        if ($payment['status'] !== 'requires_capture' || $payment['captureMethod'] !== 'manual' || $payment['paymentMethodType'] !== 'card'
+            || $payment['capturedAmountMinor'] !== 0 || $payment['refundedAmountMinor'] !== 0 || $payment['amountCapturableMinor'] !== $payment['amountMinor']
+            || ($payment['partialAuthorizationStatus'] !== null && ! in_array($payment['partialAuthorizationStatus'], ['fully_authorized', 'not_requested'], true))) {
             throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Stripe authorization is not supported or no longer available.');
         }
-    }
-
-    /** Return persisted facts including the synchronization timestamps. */
-    private function snapshot(PaymentAttempt $attempt): PaymentSnapshot
-    {
-        return new PaymentSnapshot($attempt->id, $attempt->order_reference, $attempt->order_revision, $attempt->amount_minor,
-            $attempt->captured_amount_minor, $attempt->refunded_amount_minor, $attempt->currency, $attempt->state, $attempt->origin,
-            $attempt->stripe_checkout_session_id, $attempt->stripe_payment_intent_id, $attempt->stripe_charge_id, $attempt->stripe_account_id,
-            $attempt->stripe_livemode, $attempt->capture_method,
-            $attempt->expires_at === null ? null : CarbonImmutable::instance($attempt->expires_at),
-            $attempt->last_synced_at === null ? null : CarbonImmutable::instance($attempt->last_synced_at));
     }
 }

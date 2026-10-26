@@ -2,18 +2,19 @@
 
 declare(strict_types=1);
 
+use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Nvl\Payments\Actions\ReconcilePaymentAction;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
+use Nvl\Payments\Services\PaymentProjection;
+use Nvl\Payments\Services\PaymentRefunds;
+use Nvl\Payments\Tests\Fixtures\ReconcilePaymentAction;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Exceptions\BindingRequiredException;
 use Stripe\Exception\InvalidRequestException;
 
@@ -35,13 +36,15 @@ it('persists full and partial refund outcomes and replays the same UUID without 
         return refundPaymentState();
     });
     $this->gateway->shouldReceive('refunds')->once()->andReturn([]);
-    $this->gateway->shouldReceive('refund')->once()->with('pi_refund', $amount, 'requested_by_customer', 'payments:refund:'.$this->uuid)->andReturnUsing(function () use ($amount, $status): StripeRefundState {
+    $this->gateway->shouldReceive('refund')->once()->with('pi_refund', $amount, 'requested_by_customer', 'payments:refund:'.$this->uuid)->andReturnUsing(function () use ($amount, $status): array {
         expect(PaymentRefund::sole()->status)->toBe('reserved')->and(PaymentOperation::sole()->status)->toBe('reserved')->and(DB::connection()->transactionLevel())->toBe(0);
 
         return remoteRefund(amount: $amount, status: $status);
     });
-    $result = refundPayment($amount, $this->uuid, note: 'Internal only');
-    expect($result->status)->toBe($status)->and($result->amountMinor)->toBe($amount)->and($result->stripeRefundId)->toBe('re_test')
+    $refund = app(PaymentRefunds::class)->refund($this->attempt, $amount, 'requested_by_customer', 'Internal only', $this->uuid, new GenericUser(['id' => 'admin']));
+    expect($refund)->toBeInstanceOf(PaymentRefund::class)->and($refund->payment_attempt_id)->toBe($this->attempt->id);
+    $result = app(PaymentProjection::class)->refund($refund);
+    expect($result['status'])->toBe($status)->and($result['amountMinor'])->toBe($amount)->and($result['stripeRefundId'])->toBe('re_test')
         ->and(refundPayment($amount, $this->uuid, note: 'Internal only'))->toEqual($result)
         ->and(PaymentRefund::sole()->internal_note)->toBe('Internal only')->and(PaymentOperation::sole()->status)->toBe('completed');
 })->with([700, 1200])->with(['pending', 'requires_action', 'succeeded', 'failed', 'canceled']);
@@ -52,7 +55,7 @@ it('supports repeated partial refunds without double counting known remote refun
     $this->gateway->shouldReceive('refund')->with('pi_refund', 700, 'requested_by_customer', Mockery::type('string'))->once()->andReturn(remoteRefund());
     $this->gateway->shouldReceive('refund')->with('pi_refund', 500, 'requested_by_customer', Mockery::type('string'))->once()->andReturn(remoteRefund('re_second', 500));
     refundPayment();
-    expect(refundPayment(500)->status)->toBe('succeeded')->and((int) PaymentRefund::sum('amount_minor'))->toBe(1200);
+    expect(refundPayment(500)['status'])->toBe('succeeded')->and((int) PaymentRefund::sum('amount_minor'))->toBe(1200);
     expect(fn () => refundPayment(1))->toThrow(DomainException::class);
 });
 
@@ -61,7 +64,7 @@ it('reserves Dashboard refunds including pending ones without counting the Strip
     $this->gateway->shouldReceive('refunds')->andReturn([remoteRefund('re_dashboard', 700, $status)]);
     expect(fn () => refundPayment(501))->toThrow(DomainException::class);
     $this->gateway->shouldReceive('refund')->once()->andReturn(remoteRefund('re_local', 500));
-    expect(refundPayment(500)->status)->toBe('succeeded')->and(PaymentRefund::count())->toBe(1);
+    expect(refundPayment(500)['status'])->toBe('succeeded')->and(PaymentRefund::count())->toBe(1);
 })->with(['succeeded', 'pending', 'requires_action']);
 
 it('keeps ambiguous reservations blocked and prevents overdrawing with another UUID', function (): void {
@@ -81,7 +84,7 @@ it('releases a pending reservation only after confirmed remote failure', functio
     $this->gateway->shouldReceive('refund')->andReturn(remoteRefund(status: 'pending'), remoteRefund('re_retry', 1200));
     refundPayment();
     expect(fn () => refundPayment(501))->toThrow(DomainException::class);
-    expect(refundPayment(1200)->status)->toBe('succeeded')->and(PaymentRefund::where('stripe_refund_id', 're_test')->sole()->status)->toBe('failed');
+    expect(refundPayment(1200)['status'])->toBe('succeeded')->and(PaymentRefund::where('stripe_refund_id', 're_test')->sole()->status)->toBe('failed');
 });
 
 it('rejects changed immutable UUID inputs', function (int $amount, string $reason, ?string $note): void {
@@ -128,7 +131,7 @@ it('marks confirmed Stripe balance rejections failed and refreshes the external 
     expect(fn () => refundPayment(700, $this->uuid))->toThrow(InvalidRequestException::class);
     expect(PaymentRefund::sole()->status)->toBe('failed')->and(PaymentOperation::sole()->status)->toBe('failed')
         ->and($this->attempt->refresh()->refunded_amount_minor)->toBe(1200);
-    expect(refundPayment(700, $this->uuid)->status)->toBe('failed');
+    expect(refundPayment(700, $this->uuid)['status'])->toBe('failed');
 });
 
 it('keeps malformed refund responses unresolved', function (): void {
@@ -172,26 +175,26 @@ it('does not release reservations on an unclassified Stripe rejection', function
 it('rejects malformed refund identity and financial facts without releasing the reservation', function (string $field, mixed $value): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
     $this->gateway->shouldReceive('refunds')->andReturn([]);
-    $facts = get_object_vars(remoteRefund());
+    $facts = remoteRefund();
     $facts[$field] = $value;
-    $this->gateway->shouldReceive('refund')->once()->andReturn(new StripeRefundState(...$facts));
+    $this->gateway->shouldReceive('refund')->once()->andReturn(array_replace(['operationKey' => null], $facts));
     expect(fn () => refundPayment())->toThrow(DomainException::class);
     expect(PaymentRefund::sole()->status)->toBe('reserved')->and(PaymentOperation::sole()->status)->toBe('unknown');
 })->with([['refundId', 'pi_wrong'], ['paymentIntentId', 'pi_wrong'], ['chargeId', 'ch_wrong'], ['accountId', 'acct_other'], ['livemode', true], ['currency', 'usd'], ['reason', 'fraudulent'], ['status', 'mystery']]);
 
 it('validates remote Dashboard refund identities before admitting a refund', function (): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
-    $this->gateway->shouldReceive('refunds')->andReturn([new StripeRefundState('re_other', 'pi_other', 'ch_other', 'acct_test', false, 700, 'eur', 'pending', 'requested_by_customer')]);
+    $this->gateway->shouldReceive('refunds')->andReturn([['refundId' => 're_other', 'paymentIntentId' => 'pi_other', 'chargeId' => 'ch_other', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 700, 'currency' => 'eur', 'status' => 'pending', 'reason' => 'requested_by_customer', 'operationKey' => null]]);
     expect(fn () => refundPayment())->toThrow(DomainException::class);
     expect(PaymentOperation::count())->toBe(0);
 });
 
 it('passes only the stored original payment and Stripe reason to the gateway', function (string $reason): void {
     $this->attempt->update(['stripe_payment_intent_id' => null]);
-    $this->gateway->shouldReceive('payment')->with('ch_refund')->once()->andReturn(new StripePaymentState(null, 'ch_refund', 'acct_test', false, 1200, 1200, 0, 'eur', 'succeeded', 'automatic'));
+    $this->gateway->shouldReceive('payment')->with('ch_refund')->once()->andReturn(['paymentIntentId' => null, 'chargeId' => 'ch_refund', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1200, 'capturedAmountMinor' => 1200, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
     $this->gateway->shouldReceive('refunds')->with('ch_refund')->once()->andReturn([]);
-    $this->gateway->shouldReceive('refund')->with('ch_refund', 700, $reason, 'payments:refund:'.$this->uuid)->once()->andReturn(new StripeRefundState('re_original', null, 'ch_refund', 'acct_test', false, 700, 'eur', 'succeeded', $reason));
-    expect(refundPayment(700, $this->uuid, $reason, 'destination=untrusted note')->stripeRefundId)->toBe('re_original');
+    $this->gateway->shouldReceive('refund')->with('ch_refund', 700, $reason, 'payments:refund:'.$this->uuid)->once()->andReturn(['refundId' => 're_original', 'paymentIntentId' => null, 'chargeId' => 'ch_refund', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 700, 'currency' => 'eur', 'status' => 'succeeded', 'reason' => $reason, 'operationKey' => null]);
+    expect(refundPayment(700, $this->uuid, $reason, 'destination=untrusted note')['stripeRefundId'])->toBe('re_original');
 })->with(['duplicate', 'fraudulent']);
 
 it('rejects disabled operation and absent payment identity before gateway calls', function (bool $enabled): void {
@@ -206,12 +209,12 @@ it('rejects disabled operation and absent payment identity before gateway calls'
 it('preserves a reconciled terminal refund when a pending creation response arrives late', function (string $status): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
     $this->gateway->shouldReceive('refunds')->andReturn([]);
-    $this->gateway->shouldReceive('refund')->once()->andReturnUsing(function () use ($status): StripeRefundState {
+    $this->gateway->shouldReceive('refund')->once()->andReturnUsing(function () use ($status): array {
         PaymentRefund::sole()->update(['stripe_refund_id' => 're_test', 'status' => $status, 'last_synced_at' => now()]);
 
         return remoteRefund(status: 'pending');
     });
-    expect(refundPayment()->status)->toBe($status)->and(PaymentRefund::sole()->status)->toBe($status);
+    expect(refundPayment()['status'])->toBe($status)->and(PaymentRefund::sole()->status)->toBe($status);
 })->with(['succeeded', 'failed', 'canceled']);
 
 it('reconciles succeeded refunds through requires action and releases only confirmed returned funds', function (string $finalStatus): void {
@@ -230,19 +233,19 @@ it('reconciles succeeded refunds through requires action and releases only confi
     refundPayment(100);
     expect(PaymentRefund::where('stripe_refund_id', 're_test')->sole()->status)->toBe('requires_action');
     expect(fn () => refundPayment(401))->toThrow(DomainException::class);
-    expect(refundPayment(1100)->status)->toBe('succeeded')
+    expect(refundPayment(1100)['status'])->toBe('succeeded')
         ->and(PaymentRefund::where('stripe_refund_id', 're_test')->sole()->status)->toBe($finalStatus);
 })->with(['failed', 'canceled']);
 
 it('keeps a newer requires action observation when the original succeeded creation response arrives late', function (): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
     $this->gateway->shouldReceive('refunds')->andReturn([]);
-    $this->gateway->shouldReceive('refund')->once()->andReturnUsing(function (): StripeRefundState {
+    $this->gateway->shouldReceive('refund')->once()->andReturnUsing(function (): array {
         PaymentRefund::sole()->update(['stripe_refund_id' => 're_test', 'status' => 'requires_action', 'last_synced_at' => now()]);
 
         return remoteRefund(status: 'succeeded');
     });
-    expect(refundPayment()->status)->toBe('requires_action');
+    expect(refundPayment()['status'])->toBe('requires_action');
 });
 
 it('accepts non-card Stripe refund IDs from creation responses', function (): void {
@@ -250,7 +253,7 @@ it('accepts non-card Stripe refund IDs from creation responses', function (): vo
     $this->gateway->shouldReceive('refunds')->once()->andReturn([]);
     $this->gateway->shouldReceive('refund')->once()->andReturn(remoteRefund('pyr_noncard', 700, 'requires_action'));
     $result = refundPayment(700, $this->uuid);
-    expect($result->stripeRefundId)->toBe('pyr_noncard')->and($result->status)->toBe('requires_action')
+    expect($result['stripeRefundId'])->toBe('pyr_noncard')->and($result['status'])->toBe('requires_action')
         ->and(refundPayment(700, $this->uuid))->toEqual($result);
 });
 
@@ -259,7 +262,7 @@ it('reserves non-card Dashboard refund amounts using their provider identity', f
     $this->gateway->shouldReceive('refunds')->andReturn([remoteRefund('pyr_dashboard', 700, 'requires_action')]);
     expect(fn () => refundPayment(501))->toThrow(DomainException::class);
     $this->gateway->shouldReceive('refund')->once()->andReturn(remoteRefund('pyr_remainder', 500));
-    expect(refundPayment(500)->stripeRefundId)->toBe('pyr_remainder');
+    expect(refundPayment(500)['stripeRefundId'])->toBe('pyr_remainder');
 });
 
 it('allows an explicitly authorized refund of confirmed exception money while retaining its block', function (): void {
@@ -267,7 +270,7 @@ it('allows an explicitly authorized refund of confirmed exception money while re
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
     $this->gateway->shouldReceive('refunds')->andReturn([]);
     $this->gateway->shouldReceive('refund')->once()->andReturn(remoteRefund());
-    expect(refundPayment()->status)->toBe('succeeded')->and($this->attempt->refresh()->state)->toBe('payment_exception')
+    expect(refundPayment()['status'])->toBe('succeeded')->and($this->attempt->refresh()->state)->toBe('payment_exception')
         ->and($this->attempt->reservation_key)->toBe('held')->and(PaymentOperation::sole()->actor_reference)->toBe('admin');
 });
 
@@ -276,9 +279,9 @@ it('recovers the original reservation when reconciliation precedes the refund cr
     $this->gateway->shouldReceive('refunds')->andReturnUsing(function (): array {
         $operation = PaymentOperation::first();
 
-        return $operation === null ? [] : [new StripeRefundState('re_test', 'pi_refund', 'ch_refund', 'acct_test', false, 700, 'eur', 'succeeded', 'requested_by_customer', $operation->idempotency_key)];
+        return $operation === null ? [] : [['refundId' => 're_test', 'paymentIntentId' => 'pi_refund', 'chargeId' => 'ch_refund', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 700, 'currency' => 'eur', 'status' => 'succeeded', 'reason' => 'requested_by_customer', 'operationKey' => $operation->idempotency_key]];
     });
-    $this->gateway->shouldReceive('refund')->once()->andReturnUsing(function () use ($lost): StripeRefundState {
+    $this->gateway->shouldReceive('refund')->once()->andReturnUsing(function () use ($lost): array {
         app(ReconcilePaymentAction::class)->execute($this->attempt->id);
         if ($lost) {
             throw new RuntimeException('response lost');
@@ -289,9 +292,9 @@ it('recovers the original reservation when reconciliation precedes the refund cr
     if ($lost) {
         expect(fn () => refundPayment(700, $this->uuid))->toThrow(RuntimeException::class);
     } else {
-        expect(refundPayment(700, $this->uuid)->status)->toBe('succeeded');
+        expect(refundPayment(700, $this->uuid)['status'])->toBe('succeeded');
     }
-    expect(refundPayment(700, $this->uuid)->status)->toBe('succeeded')->and(PaymentRefund::count())->toBe(1)
+    expect(refundPayment(700, $this->uuid)['status'])->toBe('succeeded')->and(PaymentRefund::count())->toBe(1)
         ->and(PaymentOperation::sole()->status)->toBe('completed');
-    expect(app(ReconcilePaymentAction::class)->execute($this->attempt->id)->refundableAmountMinor)->toBe(500);
+    expect(app(ReconcilePaymentAction::class)->execute($this->attempt->id)['refundableAmountMinor'])->toBe(500);
 })->with([true, false]);

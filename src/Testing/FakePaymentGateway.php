@@ -7,11 +7,7 @@ namespace Nvl\Payments\Testing;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Container\Container;
 use Nvl\Payments\Contracts\PaymentGateway;
-use Nvl\Payments\ValueObjects\HostedCheckout;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripeCheckoutState;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Testing\FakeCalls;
 use TypeError;
 
@@ -19,6 +15,11 @@ use TypeError;
  * Supplies explicit one-time payment responses without Stripe, storage, or lifecycle execution.
  *
  * @api
+ *
+ * @phpstan-import-type HostedCheckout from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeCheckoutState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
  */
 final class FakePaymentGateway implements PaymentGateway
 {
@@ -36,9 +37,11 @@ final class FakePaymentGateway implements PaymentGateway
     }
 
     /**
-     * Return the next scripted Checkout session for the exact order and operation parameters.
+     * * Return the next scripted Checkout session for the exact order and operation parameters.
+     *
+     * @return HostedCheckout
      */
-    public function createCheckout(OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, CarbonImmutable $expiresAt, string $idempotencyKey): HostedCheckout
+    public function createCheckout(OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, CarbonImmutable $expiresAt, string $idempotencyKey): array
     {
         $result = $this->invoke('createCheckout', [
             'order' => $order,
@@ -49,8 +52,8 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! $result instanceof HostedCheckout) {
-            throw new TypeError('FakePaymentGateway::createCheckout requires a scripted HostedCheckout.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::createCheckout requires scripted hosted checkout facts.');
         }
 
         return $result;
@@ -65,51 +68,59 @@ final class FakePaymentGateway implements PaymentGateway
     }
 
     /**
-     * Return the next scripted Checkout state without retrieving a remote session.
+     * * Return the next scripted Checkout state without retrieving a remote session.
+     *
+     * @return StripeCheckoutState
      */
-    public function checkout(string $sessionId): StripeCheckoutState
+    public function checkout(string $sessionId): array
     {
         $result = $this->invoke('checkout', ['sessionId' => $sessionId]);
 
-        if (! $result instanceof StripeCheckoutState) {
-            throw new TypeError('FakePaymentGateway::checkout requires a scripted StripeCheckoutState.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::checkout requires scripted checkout facts.');
         }
 
         return $result;
     }
 
     /**
-     * Return the next scripted payment state for the supplied reference.
+     * * Return the next scripted payment state for the supplied reference.
+     *
+     * @return StripePaymentState
      */
-    public function payment(string $paymentReference): StripePaymentState
+    public function payment(string $paymentReference): array
     {
         $result = $this->invoke('payment', ['paymentReference' => $paymentReference]);
 
-        if (! $result instanceof StripePaymentState) {
-            throw new TypeError('FakePaymentGateway::payment requires a scripted StripePaymentState.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::payment requires scripted payment facts.');
         }
 
         return $result;
     }
 
     /**
-     * Return the next scripted existing-payment resolution without another gateway call.
+     * * Return the next scripted existing-payment resolution without another gateway call.
+     *
+     * @return StripePaymentState
      */
-    public function resolveExisting(string $reference): StripePaymentState
+    public function resolveExisting(string $reference): array
     {
         $result = $this->invoke('resolveExisting', ['reference' => $reference]);
 
-        if (! $result instanceof StripePaymentState) {
-            throw new TypeError('FakePaymentGateway::resolveExisting requires a scripted StripePaymentState.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::resolveExisting requires scripted payment facts.');
         }
 
         return $result;
     }
 
     /**
-     * Return the next scripted capture state for the exact minor amount and idempotency key.
+     * * Return the next scripted capture state for the exact minor amount and idempotency key.
+     *
+     * @return StripePaymentState
      */
-    public function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): StripePaymentState
+    public function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
     {
         $result = $this->invoke('capture', [
             'paymentIntentId' => $paymentIntentId,
@@ -117,34 +128,38 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! $result instanceof StripePaymentState) {
-            throw new TypeError('FakePaymentGateway::capture requires a scripted StripePaymentState.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::capture requires scripted payment facts.');
         }
 
         return $result;
     }
 
     /**
-     * Return the next scripted cancellation state without mutating authorization evidence.
+     * * Return the next scripted cancellation state without mutating authorization evidence.
+     *
+     * @return StripePaymentState
      */
-    public function cancel(string $paymentIntentId, string $idempotencyKey): StripePaymentState
+    public function cancel(string $paymentIntentId, string $idempotencyKey): array
     {
         $result = $this->invoke('cancel', [
             'paymentIntentId' => $paymentIntentId,
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! $result instanceof StripePaymentState) {
-            throw new TypeError('FakePaymentGateway::cancel requires a scripted StripePaymentState.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::cancel requires scripted payment facts.');
         }
 
         return $result;
     }
 
     /**
-     * Return the next scripted refund state for the exact requested refund parameters.
+     * * Return the next scripted refund state for the exact requested refund parameters.
+     *
+     * @return StripeRefundState
      */
-    public function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): StripeRefundState
+    public function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
     {
         $result = $this->invoke('refund', [
             'paymentId' => $paymentId,
@@ -153,8 +168,8 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! $result instanceof StripeRefundState) {
-            throw new TypeError('FakePaymentGateway::refund requires a scripted StripeRefundState.');
+        if (! is_array($result)) {
+            throw new TypeError('FakePaymentGateway::refund requires scripted refund facts.');
         }
 
         return $result;
@@ -164,19 +179,20 @@ final class FakePaymentGateway implements PaymentGateway
      * Return the next scripted refund list without retrieving remote refunds.
      *
      * @return list<StripeRefundState>
+     * @return list<StripeRefundState>
      */
     public function refunds(string $paymentId): array
     {
         $result = $this->invoke('refunds', ['paymentId' => $paymentId]);
 
         if (! is_array($result) || ! array_is_list($result)) {
-            throw new TypeError('FakePaymentGateway::refunds requires a scripted list of StripeRefundState.');
+            throw new TypeError('FakePaymentGateway::refunds requires a scripted list of refund facts.');
         }
 
         $refunds = [];
         foreach ($result as $refund) {
-            if (! $refund instanceof StripeRefundState) {
-                throw new TypeError('FakePaymentGateway::refunds requires a scripted list of StripeRefundState.');
+            if (! is_array($refund)) {
+                throw new TypeError('FakePaymentGateway::refunds requires a scripted list of refund facts.');
             }
 
             $refunds[] = $refund;

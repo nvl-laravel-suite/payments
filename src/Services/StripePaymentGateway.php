@@ -7,11 +7,7 @@ namespace Nvl\Payments\Services;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
-use Nvl\Payments\ValueObjects\HostedCheckout;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripeCheckoutState;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Stripe\Charge;
 use Stripe\PaymentIntent;
 use Stripe\Refund;
@@ -19,7 +15,14 @@ use Stripe\StripeClient;
 use Stripe\StripeObject;
 use UnexpectedValueException;
 
-/** Stripe SDK adapter with credential identity and remote mode checks. */
+/**
+ * Stripe SDK adapter with credential identity and remote mode checks.
+ *
+ * @phpstan-import-type HostedCheckout from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeCheckoutState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
+ */
 final class StripePaymentGateway implements PaymentGateway
 {
     /** @param list<string> $paymentMethodTypes Explicit Checkout methods; manual capture is limited to cards. */
@@ -30,7 +33,10 @@ final class StripePaymentGateway implements PaymentGateway
         private readonly array $paymentMethodTypes = ['card'],
     ) {}
 
-    public function createCheckout(OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, CarbonImmutable $expiresAt, string $idempotencyKey): HostedCheckout
+    /**
+     * @return HostedCheckout
+     */
+    public function createCheckout(OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, CarbonImmutable $expiresAt, string $idempotencyKey): array
     {
         if (! in_array($captureMethod, ['automatic', 'manual'], true) || $this->paymentMethodTypes === [] || ($captureMethod === 'manual' && array_diff($this->paymentMethodTypes, ['card']) !== [])) {
             throw new InvalidArgumentException('Unsupported capture method or payment method combination.');
@@ -51,7 +57,7 @@ final class StripePaymentGateway implements PaymentGateway
         $session = $this->client->checkout->sessions->create($params, $options);
         $this->verifyMode($session);
 
-        return new HostedCheckout($session->id, $session->url ?? throw new UnexpectedValueException('Stripe returned no hosted URL.'), CarbonImmutable::createFromTimestampUTC($session->expires_at));
+        return ['sessionId' => $session->id, 'url' => $session->url ?? throw new UnexpectedValueException('Stripe returned no hosted URL.'), 'expiresAt' => CarbonImmutable::createFromTimestampUTC($session->expires_at)];
     }
 
     public function expireCheckout(string $sessionId, string $idempotencyKey): void
@@ -61,7 +67,10 @@ final class StripePaymentGateway implements PaymentGateway
         $this->verifyMode($this->client->checkout->sessions->expire($sessionId, [], $options));
     }
 
-    public function checkout(string $sessionId): StripeCheckoutState
+    /**
+     * @return StripeCheckoutState
+     */
+    public function checkout(string $sessionId): array
     {
         $this->verifyAccount();
         $session = $this->client->checkout->sessions->retrieve($sessionId);
@@ -70,10 +79,13 @@ final class StripePaymentGateway implements PaymentGateway
             throw new UnexpectedValueException('Checkout Session is not a one-time payment.');
         }
 
-        return new StripeCheckoutState($session->id, $this->reference($session->payment_intent), $this->accountId, $session->livemode, $session->amount_total ?? 0, $session->currency ?? '', $session->status ?? throw new UnexpectedValueException('Missing Checkout status.'), $session->payment_status, $this->metadataString($session->metadata, 'order_reference'), $this->metadataString($session->metadata, 'order_revision'), CarbonImmutable::createFromTimestampUTC($session->expires_at), $this->metadataString($session->metadata, 'payment_operation_key'), $session->url);
+        return ['sessionId' => $session->id, 'paymentIntentId' => $this->reference($session->payment_intent), 'accountId' => $this->accountId, 'livemode' => $session->livemode, 'amountMinor' => $session->amount_total ?? 0, 'currency' => $session->currency ?? '', 'status' => $session->status ?? throw new UnexpectedValueException('Missing Checkout status.'), 'paymentStatus' => $session->payment_status, 'orderReference' => $this->metadataString($session->metadata, 'order_reference'), 'orderRevision' => $this->metadataString($session->metadata, 'order_revision'), 'expiresAt' => CarbonImmutable::createFromTimestampUTC($session->expires_at), 'operationKey' => $this->metadataString($session->metadata, 'payment_operation_key'), 'url' => $session->url];
     }
 
-    public function payment(string $paymentReference): StripePaymentState
+    /**
+     * @return StripePaymentState
+     */
+    public function payment(string $paymentReference): array
     {
         $field = $this->paymentField($paymentReference);
         $this->verifyAccount();
@@ -86,10 +98,13 @@ final class StripePaymentGateway implements PaymentGateway
             return $this->payment($this->reference($charge->payment_intent) ?? throw new UnexpectedValueException('Missing PaymentIntent ID.'));
         }
 
-        return new StripePaymentState(null, $charge->id, $this->accountId, $charge->livemode, $charge->amount, $charge->amount_captured, $charge->amount_refunded, $charge->currency, $charge->captured ? $charge->status : ($charge->status === 'succeeded' ? 'requires_capture' : $charge->status), $charge->captured ? 'automatic' : 'manual');
+        return ['paymentIntentId' => null, 'chargeId' => $charge->id, 'accountId' => $this->accountId, 'livemode' => $charge->livemode, 'amountMinor' => $charge->amount, 'capturedAmountMinor' => $charge->amount_captured, 'refundedAmountMinor' => $charge->amount_refunded, 'currency' => $charge->currency, 'status' => $charge->captured ? $charge->status : ($charge->status === 'succeeded' ? 'requires_capture' : $charge->status), 'captureMethod' => $charge->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
     }
 
-    public function resolveExisting(string $reference): StripePaymentState
+    /**
+     * @return StripePaymentState
+     */
+    public function resolveExisting(string $reference): array
     {
         if (str_starts_with($reference, 'txn_')) {
             $this->verifyAccount();
@@ -104,7 +119,10 @@ final class StripePaymentGateway implements PaymentGateway
         return $this->payment($reference);
     }
 
-    public function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): StripePaymentState
+    /**
+     * @return StripePaymentState
+     */
+    public function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
     {
         $this->positiveAmount($amountMinor);
         $options = $this->options($idempotencyKey);
@@ -114,7 +132,10 @@ final class StripePaymentGateway implements PaymentGateway
         return $this->intentState($this->client->paymentIntents->capture($paymentIntentId, ['amount_to_capture' => $amountMinor, 'final_capture' => true, 'expand' => ['latest_charge']], $options));
     }
 
-    public function cancel(string $paymentIntentId, string $idempotencyKey): StripePaymentState
+    /**
+     * @return StripePaymentState
+     */
+    public function cancel(string $paymentIntentId, string $idempotencyKey): array
     {
         $options = $this->options($idempotencyKey);
         $this->requireIntent($paymentIntentId);
@@ -123,7 +144,10 @@ final class StripePaymentGateway implements PaymentGateway
         return $this->intentState($this->client->paymentIntents->cancel($paymentIntentId, ['expand' => ['latest_charge']], $options));
     }
 
-    public function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): StripeRefundState
+    /**
+     * @return StripeRefundState
+     */
+    public function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
     {
         $this->positiveAmount($amountMinor);
         $this->paymentField($paymentId);
@@ -133,16 +157,19 @@ final class StripePaymentGateway implements PaymentGateway
         }
         $payment = $this->payment($paymentId);
 
-        return $this->refundState($this->client->refunds->create(array_merge($this->paymentFilter($paymentId), ['amount' => $amountMinor, 'reason' => $reason, 'metadata' => ['payment_operation_key' => $idempotencyKey]]), $options), $payment->livemode);
+        return $this->refundState($this->client->refunds->create(array_merge($this->paymentFilter($paymentId), ['amount' => $amountMinor, 'reason' => $reason, 'metadata' => ['payment_operation_key' => $idempotencyKey]]), $options), $payment['livemode']);
     }
 
+    /**
+     * @return list<StripeRefundState>
+     */
     public function refunds(string $paymentId): array
     {
         $this->paymentField($paymentId);
         $payment = $this->payment($paymentId);
         $states = [];
         foreach ($this->client->refunds->all(array_merge($this->paymentFilter($paymentId), ['limit' => 100]))->autoPagingIterator() as $refund) {
-            $states[] = $this->refundState($refund, $payment->livemode);
+            $states[] = $this->refundState($refund, $payment['livemode']);
         }
 
         return $states;
@@ -163,7 +190,10 @@ final class StripePaymentGateway implements PaymentGateway
         }
     }
 
-    private function intentState(PaymentIntent $intent): StripePaymentState
+    /**
+     * @return StripePaymentState
+     */
+    private function intentState(PaymentIntent $intent): array
     {
         $this->verifyMode($intent);
         $charge = $intent->latest_charge;
@@ -181,13 +211,17 @@ final class StripePaymentGateway implements PaymentGateway
         $partialAuthorization = $card instanceof StripeObject ? $card['partial_authorization'] : null;
         $partialStatus = $partialAuthorization instanceof StripeObject ? $partialAuthorization['status'] : null;
 
-        return new StripePaymentState($intent->id, $this->reference($charge), $this->accountId, $intent->livemode, $intent->amount, $intent->amount_received, $charge->amount_refunded ?? 0, $intent->currency, $intent->status, $intent->capture_method, is_int($capturable) ? $capturable : null, is_string($method) ? $method : null, is_string($partialStatus) ? $partialStatus : null);
+        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, 'refundedAmountMinor' => $charge->amount_refunded ?? 0, 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null];
     }
 
-    /** Refund objects have no livemode; their parent payment establishes the mode. */
-    private function refundState(Refund $refund, bool $livemode): StripeRefundState
+    /**
+     * Refund objects have no livemode; their parent payment establishes the mode.
+     *
+     * @return StripeRefundState
+     */
+    private function refundState(Refund $refund, bool $livemode): array
     {
-        return new StripeRefundState($refund->id, $this->reference($refund->payment_intent), $this->reference($refund->charge), $this->accountId, $livemode, $refund->amount, $refund->currency, $refund->status ?? 'pending', $refund->reason, $this->metadataString($refund->metadata ?? null, 'payment_operation_key'));
+        return ['refundId' => $refund->id, 'paymentIntentId' => $this->reference($refund->payment_intent), 'chargeId' => $this->reference($refund->charge), 'accountId' => $this->accountId, 'livemode' => $livemode, 'amountMinor' => $refund->amount, 'currency' => $refund->currency, 'status' => $refund->status ?? 'pending', 'reason' => $refund->reason, 'operationKey' => $this->metadataString($refund->metadata ?? null, 'payment_operation_key')];
     }
 
     /** Read optional order correlation without trusting non-string metadata. */

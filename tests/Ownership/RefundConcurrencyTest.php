@@ -8,17 +8,15 @@ use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\Actor;
 use Nvl\Ownership\Tests\Fixtures\Company;
-use Nvl\Payments\Actions\RefundPaymentAction;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
+use Nvl\Payments\Tests\Fixtures\RefundPaymentAction;
 use Nvl\Payments\Tests\OwnerScopeTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 
 uses(OwnerScopeTestCase::class);
@@ -69,18 +67,18 @@ it('reserves one native owner refund across independent admitted PostgreSQL work
                 try {
                     app()->forgetScopedInstances();
                     $gateway = Mockery::mock(PaymentGateway::class);
-                    $gateway->shouldReceive('payment')->andReturn(new StripePaymentState('pi_native_race', 'ch_native_race', 'acct_native', false, 1000, 1000, 0, 'eur', 'succeeded', 'automatic'));
+                    $gateway->shouldReceive('payment')->andReturn(['paymentIntentId' => 'pi_native_race', 'chargeId' => 'ch_native_race', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
                     $gateway->shouldReceive('refunds')->andReturnUsing(function () use ($directory, $worker, $waitFor): array {
                         touch($directory.'/read-'.$worker);
                         $waitFor(fn () => file_exists($directory.'/read-0') && file_exists($directory.'/read-1'));
 
                         return [];
                     });
-                    $gateway->shouldReceive('refund')->andReturnUsing(function () use ($directory, $worker, $waitFor): StripeRefundState {
+                    $gateway->shouldReceive('refund')->andReturnUsing(function () use ($directory, $worker, $waitFor): array {
                         file_put_contents($directory.'/provider-calls', "refund\n", FILE_APPEND | LOCK_EX);
                         $waitFor(fn () => file_exists($directory.'/release'));
 
-                        return new StripeRefundState('re_native_'.$worker, 'pi_native_race', 'ch_native_race', 'acct_native', false, 700, 'eur', 'succeeded', 'requested_by_customer');
+                        return ['refundId' => 're_native_'.$worker, 'paymentIntentId' => 'pi_native_race', 'chargeId' => 'ch_native_race', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 700, 'currency' => 'eur', 'status' => 'succeeded', 'reason' => 'requested_by_customer', 'operationKey' => null];
                     });
                     app()->instance(PaymentGateway::class, $gateway);
                     try {
@@ -101,7 +99,7 @@ it('reserves one native owner refund across independent admitted PostgreSQL work
         touch($directory.'/release');
         foreach ($children as $pid) {
             pcntl_waitpid($pid, $status);
-            expect(pcntl_wexitstatus($status))->toBe(0);
+            expect(pcntl_wexitstatus($status))->toBe(0, implode("\n", array_map(file_get_contents(...), glob($directory.'/result-*'))));
         }
         $results = [file_get_contents($directory.'/result-0'), file_get_contents($directory.'/result-1')];
         sort($results);

@@ -2,9 +2,8 @@
 
 declare(strict_types=1);
 
-namespace Nvl\Payments\Actions;
+namespace Nvl\Payments\Services;
 
-use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Str;
@@ -12,18 +11,11 @@ use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
-use Nvl\Payments\Contracts\RefundPaymentContract;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
-use Nvl\Payments\Services\PaymentOperationJournal;
-use Nvl\Payments\Services\PaymentOrderOwnership;
-use Nvl\Payments\Services\PaymentRefundWriter;
-use Nvl\Payments\Services\PaymentStateSyncer;
-use Nvl\Payments\Services\RefundBalance;
-use Nvl\Payments\ValueObjects\RefundSnapshot;
 use Stripe\Exception\InvalidRequestException;
 use Throwable;
 
@@ -32,7 +24,7 @@ use Throwable;
  *
  * @api
  */
-final class RefundPaymentAction implements RefundPaymentContract
+final class PaymentRefunds
 {
     /** Inject trusted host admission, remote facts, and refund reservation boundaries. */
     public function __construct(
@@ -47,8 +39,9 @@ final class RefundPaymentAction implements RefundPaymentContract
     ) {}
 
     /** Reserve refundable funds atomically and issue one idempotent refund to the original payment method. */
-    public function execute(string $attemptId, Authenticatable $actor, int $amountMinor, string $reason, ?string $note, string $operationId): RefundSnapshot
+    public function refund(PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Authenticatable $actor): PaymentRefund
     {
+        $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->scope->assertOrder($order, $actor);
@@ -112,9 +105,9 @@ final class RefundPaymentAction implements RefundPaymentContract
                 $this->balance->assertMatches($attempt, $result, $current);
                 // A linked refund has already been observed by reconciliation after creation.
                 if ($current->stripe_refund_id === null) {
-                    $current->update(['stripe_refund_id' => $result->refundId, 'status' => $result->status, 'last_synced_at' => now()]);
+                    $current->update(['stripe_refund_id' => $result['refundId'], 'status' => $result['status'], 'last_synced_at' => now()]);
                 }
-                $this->journal->complete($operation, $result->refundId);
+                $this->journal->complete($operation, $result['refundId']);
             }, 5);
         } catch (InvalidRequestException $exception) {
             if ($exception->getHttpStatus() === 400 && in_array($exception->getStripeCode(), ['charge_already_refunded', 'amount_too_large'], true)) {
@@ -135,24 +128,16 @@ final class RefundPaymentAction implements RefundPaymentContract
             throw $exception;
         }
 
-        return $this->snapshot($refund->refresh());
+        return $refund->refresh();
     }
 
     /** Return a confirmed result and leave ambiguous operations blocked for reconciliation. */
-    private function replay(PaymentOperation $operation): RefundSnapshot
+    private function replay(PaymentOperation $operation): PaymentRefund
     {
         if (! in_array($operation->status, ['completed', 'failed'], true)) {
             throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Refund operation is unresolved; reconcile before retrying.');
         }
 
-        return $this->snapshot(PaymentRefund::query()->where('payment_operation_id', $operation->id)->sole());
-    }
-
-    /** Return persisted refund facts with pending distinct from success. */
-    private function snapshot(PaymentRefund $refund): RefundSnapshot
-    {
-        return new RefundSnapshot($refund->id, $refund->payment_attempt_id, $refund->payment_operation_id, $refund->amount_minor,
-            $refund->currency, $refund->reason, $refund->status, $refund->stripe_refund_id,
-            $refund->last_synced_at === null ? null : CarbonImmutable::instance($refund->last_synced_at));
+        return PaymentRefund::query()->where('payment_operation_id', $operation->id)->sole();
     }
 }

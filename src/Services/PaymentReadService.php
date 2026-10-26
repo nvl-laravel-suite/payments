@@ -7,25 +7,30 @@ namespace Nvl\Payments\Services;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
-use Nvl\Payments\Contracts\PaymentReadContract;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
-use Nvl\Payments\ValueObjects\OrderPaymentTimeline;
 
 /**
  * Returns authorized order timelines using two configured-connection queries.
  *
  * @api
+ *
+ * @phpstan-import-type PaymentSnapshot from PaymentProjection
+ * @phpstan-import-type RefundSnapshot from PaymentProjection
  */
-final class PaymentReadService implements PaymentReadContract
+final class PaymentReadService
 {
     /** Inject host order admission and immutable projection mapping. */
     public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentProjection $projection, private readonly PaymentOrderOwnership $scope) {}
 
-    /** Resolve and authorize the host order before reading its payment history. */
-    public function forOrder(string $orderReference, Authenticatable $actor): OrderPaymentTimeline
+    /**
+     * Resolve and authorize the host order before reading its payment history.
+     *
+     * @return array{orderReference:string, payments:list<PaymentSnapshot>, refunds:list<RefundSnapshot>}
+     */
+    public function forOrder(string $orderReference, Authenticatable $actor): array
     {
         $order = $this->orders->resolve($orderReference);
         $this->scope->assertOrder($order, $actor);
@@ -46,6 +51,6 @@ final class PaymentReadService implements PaymentReadContract
             $refundSnapshots[] = $this->projection->refund($refund);
         }
 
-        return new OrderPaymentTimeline($orderReference, $payments, $refundSnapshots);
+        return ['orderReference' => $orderReference, 'payments' => $payments, 'refunds' => $refundSnapshots];
     }
 }

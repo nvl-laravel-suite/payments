@@ -12,7 +12,6 @@ use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Testing\FakePaymentGateway;
 use Nvl\Payments\Tests\OwnerScopeTestCase;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
@@ -23,7 +22,7 @@ it('routes signed payments through immutable persisted correlation and replays o
         'order_reference' => 'native-order', 'order_revision' => 'v1', 'amount_minor' => 1000, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'open',
         'stripe_payment_intent_id' => 'pi_native', 'stripe_account_id' => 'acct_native', 'stripe_livemode' => false, 'capture_method' => 'automatic',
     ]));
-    $gateway = FakePaymentGateway::fake(app())->willReturn('payment', new StripePaymentState('pi_native', 'ch_native', 'acct_native', false, 1000, 1000, 0, 'eur', 'succeeded', 'automatic'));
+    $gateway = FakePaymentGateway::fake(app())->willReturn('payment', ['paymentIntentId' => 'pi_native', 'chargeId' => 'ch_native', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
     $body = json_encode(['id' => 'evt_native', 'object' => 'event', 'type' => 'payment_intent.succeeded', 'livemode' => false,
         'data' => ['object' => ['id' => 'pi_native', 'object' => 'payment_intent', 'metadata' => ['owner_id' => 8]]]], JSON_THROW_ON_ERROR);
     $stamp = time();

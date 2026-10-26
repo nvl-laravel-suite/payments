@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Tests;
 
-use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Payments\Providers\PaymentsServiceProvider;
 use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
@@ -17,7 +16,7 @@ class PaymentsTestCase extends TestCase
     protected function getPackageProviders($app): array
     {
         return [
-            LocaleServiceProvider::class, SupportServiceProvider::class, DataServiceProvider::class, PaymentsServiceProvider::class];
+            LocaleServiceProvider::class, SupportServiceProvider::class, PaymentsServiceProvider::class];
     }
 
     /** Configure an isolated default database without enabling Payments. */

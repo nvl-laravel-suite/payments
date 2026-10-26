@@ -14,9 +14,7 @@ enum PaymentsResponseCode: string implements ResponseCode
     case BindingRequired = 'binding_required';
     case OperationFailed = 'operation_failed';
     case FeatureDisabled = 'feature_disabled';
-    case TenantInactive = 'tenant_inactive';
     case CheckoutConflict = 'checkout_conflict';
-    case SubscriptionConflict = 'subscription_conflict';
     case ProviderIdentityMismatch = 'provider_identity_mismatch';
     case ProviderPayloadInvalid = 'provider_payload_invalid';
     case OperationConflict = 'operation_conflict';

@@ -11,7 +11,6 @@ use Nvl\Ownership\Tests\Fixtures\Company;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Testing\FakePaymentGateway;
 use Nvl\Payments\Tests\OwnerScopeTestCase;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
@@ -21,7 +20,7 @@ it('reconciles a bounded owner worklist only after fresh named system admission'
     app(OwnershipRunner::class)->run(Company::query()->findOrFail(7), Actor::query()->findOrFail(1), fn () => PaymentAttempt::query()->create([
         'order_reference' => 'repair-order', 'order_revision' => 'v1', 'amount_minor' => 1000, 'currency' => 'EUR', 'origin' => 'attached', 'state' => 'open', 'stripe_payment_intent_id' => 'pi_repair',
     ]));
-    $gateway = FakePaymentGateway::fake(app())->willReturn('payment', new StripePaymentState('pi_repair', null, 'acct_native', false, 1000, 0, 0, 'eur', 'processing', 'automatic'));
+    $gateway = FakePaymentGateway::fake(app())->willReturn('payment', ['paymentIntentId' => 'pi_repair', 'chargeId' => null, 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 0, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'processing', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
     expect(fn () => Artisan::call('nvl:payments:reconcile'))->toThrow(OwnershipViolation::class);
     $gateway->assertCalled('payment', times: 0);
     config(['nvl-ownership.system_operations' => ['payments.reconcile']]);

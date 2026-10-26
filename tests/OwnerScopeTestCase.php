@@ -12,10 +12,17 @@ use Nvl\Ownership\ValueObjects\OwnershipAdoptionPlan;
 use Nvl\Ownership\ValueObjects\OwnershipMapping;
 use Nvl\Ownership\ValueObjects\OwnershipOperation;
 use Nvl\Payments\Providers\PaymentsServiceProvider;
+use Nvl\Payments\Tests\Fixtures\PaymentsWebhookController;
 
 /** Activates native Payments roots without Tenancy, Auth or a synthetic owner. */
 abstract class OwnerScopeTestCase extends OwnershipTestCase
 {
+    /** Install the consumer endpoint independently of the package provider. */
+    protected function defineRoutes($router): void
+    {
+        $router->post('/nvl/payments/stripe/webhook', PaymentsWebhookController::class)->name('nvl.payments.webhook');
+    }
+
     public OwnershipAdoptionPlan $adoptionPlan;
 
     protected function getPackageProviders($app): array

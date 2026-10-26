@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Str;
-use Nvl\Payments\Actions\CancelAuthorizationAction;
-use Nvl\Payments\Actions\CapturePaymentAction;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
@@ -13,21 +11,21 @@ use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
+use Nvl\Payments\Tests\Fixtures\CancelAuthorizationAction;
+use Nvl\Payments\Tests\Fixtures\CapturePaymentAction;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\PaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Support\Exceptions\BindingRequiredException;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
 uses(PaymentsSchemaTestCase::class);
 
-function authorizationState(string $status = 'requires_capture', int $captured = 0): StripePaymentState
+function authorizationState(string $status = 'requires_capture', int $captured = 0): array
 {
-    return new StripePaymentState('pi_auth', 'ch_auth', 'acct_test', false, 1200, $captured, 0, 'eur', $status, 'manual', $status === 'requires_capture' ? 1200 : 0, 'card');
+    return ['paymentIntentId' => 'pi_auth', 'chargeId' => 'ch_auth', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1200, 'capturedAmountMinor' => $captured, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => $status, 'captureMethod' => 'manual', 'amountCapturableMinor' => $status === 'requires_capture' ? 1200 : 0, 'paymentMethodType' => 'card', 'partialAuthorizationStatus' => null];
 }
 
-function authorizationOperation(string $kind, string $attempt, string $uuid, int $amount = 700, string $actor = 'admin'): PaymentSnapshot
+function authorizationOperation(string $kind, string $attempt, string $uuid, int $amount = 700, string $actor = 'admin'): array
 {
     return $kind === 'capture'
         ? app(CapturePaymentAction::class)->execute($attempt, new GenericUser(['id' => $actor]), $amount, $uuid)
@@ -50,7 +48,7 @@ beforeEach(function (): void {
 
 it('confirms one final capture and returns the persisted snapshot on an identical retry', function (int $amount): void {
     $this->gateway->shouldReceive('payment')->once()->with('pi_auth')->andReturn(authorizationState());
-    $this->gateway->shouldReceive('capture')->once()->with('pi_auth', $amount, 'payments:capture:'.$this->uuid)->andReturnUsing(function () use ($amount): StripePaymentState {
+    $this->gateway->shouldReceive('capture')->once()->with('pi_auth', $amount, 'payments:capture:'.$this->uuid)->andReturnUsing(function () use ($amount): array {
         expect(PaymentOperation::sole()->status)->toBe('reserved')
             ->and(PaymentOperation::sole()->payment_attempt_id)->toBe($this->attempt->id)
             ->and((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0);
@@ -59,20 +57,20 @@ it('confirms one final capture and returns the persisted snapshot on an identica
     });
     $result = authorizationOperation('capture', $this->attempt->id, $this->uuid, $amount);
     $again = authorizationOperation('capture', $this->attempt->id, $this->uuid, $amount);
-    expect($result->status)->toBe('captured')->and($result->capturedAmountMinor)->toBe($amount)
+    expect($result['status'])->toBe('captured')->and($result['capturedAmountMinor'])->toBe($amount)
         ->and($again)->toEqual($result)->and(PaymentOperation::sole()->status)->toBe('completed');
     expect(fn () => authorizationOperation('capture', $this->attempt->id, (string) Str::uuid(), 500))->toThrow(DomainException::class);
 })->with([700, 1200]);
 
 it('cancels an authorization and releases its checkout reservation', function (): void {
     $this->gateway->shouldReceive('payment')->once()->andReturn(authorizationState());
-    $this->gateway->shouldReceive('cancel')->once()->with('pi_auth', 'payments:cancel_authorization:'.$this->uuid)->andReturnUsing(function (): StripePaymentState {
+    $this->gateway->shouldReceive('cancel')->once()->with('pi_auth', 'payments:cancel_authorization:'.$this->uuid)->andReturnUsing(function (): array {
         expect(PaymentOperation::sole()->status)->toBe('reserved')->and((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0);
 
         return authorizationState('canceled');
     });
     $result = authorizationOperation('cancel_authorization', $this->attempt->id, $this->uuid);
-    expect($result->status)->toBe('canceled')->and($this->attempt->refresh()->reservation_key)->toBeNull()
+    expect($result['status'])->toBe('canceled')->and($this->attempt->refresh()->reservation_key)->toBeNull()
         ->and(authorizationOperation('cancel_authorization', $this->attempt->id, $this->uuid))->toEqual($result);
 });
 
@@ -117,13 +115,13 @@ it('rejects reused UUIDs with different amounts actors or kinds', function (): v
 
 it('blocks competing operations while the capture is in flight', function (): void {
     $this->gateway->shouldReceive('payment')->once()->andReturn(authorizationState());
-    $this->gateway->shouldReceive('capture')->once()->andReturnUsing(function (): StripePaymentState {
+    $this->gateway->shouldReceive('capture')->once()->andReturnUsing(function (): array {
         expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(DomainException::class);
         expect(fn () => authorizationOperation('cancel_authorization', $this->attempt->id, (string) Str::uuid()))->toThrow(DomainException::class);
 
         return authorizationState('succeeded', 700);
     });
-    expect(authorizationOperation('capture', $this->attempt->id, $this->uuid)->capturedAmountMinor)->toBe(700);
+    expect(authorizationOperation('capture', $this->attempt->id, $this->uuid)['capturedAmountMinor'])->toBe(700);
 });
 
 it('rejects invalid capture amounts before a remote mutation', function (int $amount): void {
@@ -132,7 +130,7 @@ it('rejects invalid capture amounts before a remote mutation', function (int $am
 })->with([0, -1, 1201]);
 
 it('rejects unsupported or incomplete remote authorization facts', function (?int $capturable, ?string $method, string $captureMethod, int $captured, ?string $partial, string $kind): void {
-    $remote = new StripePaymentState('pi_auth', 'ch_auth', 'acct_test', false, 1200, $captured, 0, 'eur', 'requires_capture', $captureMethod, $capturable, $method, $partial);
+    $remote = ['paymentIntentId' => 'pi_auth', 'chargeId' => 'ch_auth', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1200, 'capturedAmountMinor' => $captured, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'requires_capture', 'captureMethod' => $captureMethod, 'amountCapturableMinor' => $capturable, 'paymentMethodType' => $method, 'partialAuthorizationStatus' => $partial];
     $this->gateway->shouldReceive('payment')->once()->andReturn($remote);
     expect(fn () => authorizationOperation($kind, $this->attempt->id, $this->uuid))->toThrow(DomainException::class);
     expect(PaymentOperation::where('status', 'completed')->count())->toBe(0);
@@ -170,7 +168,7 @@ it('rejects an outer transaction before reserving or calling Stripe', function (
 });
 
 it('rejects mismatched Stripe identity before a financial mutation', function (): void {
-    $this->gateway->shouldReceive('payment')->once()->andReturn(new StripePaymentState('pi_other', 'ch_auth', 'acct_test', false, 1200, 0, 0, 'eur', 'requires_capture', 'manual', 1200, 'card'));
+    $this->gateway->shouldReceive('payment')->once()->andReturn(['paymentIntentId' => 'pi_other', 'chargeId' => 'ch_auth', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1200, 'capturedAmountMinor' => 0, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'requires_capture', 'captureMethod' => 'manual', 'amountCapturableMinor' => 1200, 'paymentMethodType' => 'card', 'partialAuthorizationStatus' => null]);
     expect(fn () => authorizationOperation('capture', $this->attempt->id, $this->uuid))->toThrow(function (PaymentsException $failure): void {
         expect($failure)->toBeInstanceOf(DomainException::class)
             ->and($failure->responseCode())->toBe('provider_identity_mismatch')->and($failure->suggestedStatus())->toBe(409);

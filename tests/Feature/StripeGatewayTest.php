@@ -44,7 +44,7 @@ it('creates a correlated one-time checkout from server minor units', function (s
     $this->transport->responses[] = $this->session;
     $result = $this->gateway->createCheckout(new OrderPaymentSnapshot('order-1', 'rev-2', 1200, 'EUR', 'Order 1', 'buyer@example.com', true), $capture, 'https://shop.test/success', 'https://shop.test/cancel', CarbonImmutable::createFromTimestampUTC(1800000000), 'checkout-key');
     $request = end($this->transport->requests);
-    expect($result->sessionId)->toBe('cs_one')->and($result->expiresAt->timestamp)->toBe(1800000000)
+    expect($result['sessionId'])->toBe('cs_one')->and($result['expiresAt']->timestamp)->toBe(1800000000)
         ->and($request['params']['mode'])->toBe('payment')
         ->and($request['params']['line_items'][0]['price_data']['unit_amount'])->toBe(1200)
         ->and($request['params']['line_items'][0]['price_data']['currency'])->toBe('eur')
@@ -69,7 +69,7 @@ it('normalizes payment references and preserves remote financial facts', functio
     }
     $this->transport->responses[] = $this->intent;
     $state = $this->gateway->resolveExisting($reference);
-    expect($state->paymentIntentId)->toBe('pi_one')->and($state->chargeId)->toBe('ch_one')->and($state->accountId)->toBe('acct_expected')->and($state->livemode)->toBeFalse()->and($state->currency)->toBe('eur')->and($state->status)->toBe('succeeded')->and($state->capturedAmountMinor)->toBe(1000)->and($state->refundedAmountMinor)->toBe(200);
+    expect($state['paymentIntentId'])->toBe('pi_one')->and($state['chargeId'])->toBe('ch_one')->and($state['accountId'])->toBe('acct_expected')->and($state['livemode'])->toBeFalse()->and($state['currency'])->toBe('eur')->and($state['status'])->toBe('succeeded')->and($state['capturedAmountMinor'])->toBe(1000)->and($state['refundedAmountMinor'])->toBe(200);
 })->with(['pi_one', 'ch_one', 'txn_one']);
 
 it('rejects nonpayment balance transactions', function (): void {
@@ -91,14 +91,14 @@ it('rejects remote mode mismatches', function (): void {
 it('retrieves checkout state and expires with an explicit key', function (): void {
     $this->transport->responses = [$this->session, $this->session, $this->session];
     $state = $this->gateway->checkout('cs_one');
-    expect($state->sessionId)->toBe('cs_one')->and($state->paymentIntentId)->toBe('pi_one')->and($state->orderReference)->toBe('order-1')->and($state->status)->toBe('open')->and($state->currency)->toBe('eur')->and($state->accountId)->toBe('acct_expected');
+    expect($state['sessionId'])->toBe('cs_one')->and($state['paymentIntentId'])->toBe('pi_one')->and($state['orderReference'])->toBe('order-1')->and($state['status'])->toBe('open')->and($state['currency'])->toBe('eur')->and($state['accountId'])->toBe('acct_expected');
     $this->gateway->expireCheckout('cs_one', 'expire-key');
     expect(end($this->transport->requests)['headers'])->toContain('Idempotency-Key: expire-key');
 });
 
 it('captures and cancels with explicit keys', function (): void {
     $this->transport->responses = [$this->intent, $this->intent, $this->intent, $this->intent];
-    expect($this->gateway->capture('pi_one', 1000, 'capture-key')->capturedAmountMinor)->toBe(1000);
+    expect($this->gateway->capture('pi_one', 1000, 'capture-key')['capturedAmountMinor'])->toBe(1000);
     $request = end($this->transport->requests);
     expect($request['params']['amount_to_capture'])->toBe(1000)->and($request['params']['final_capture'])->toBe('true')->and($request['headers'])->toContain('Idempotency-Key: capture-key');
     $this->gateway->cancel('pi_one', 'cancel-key');
@@ -109,7 +109,7 @@ it('creates refunds against payment references and reads all pages', function (s
     $this->transport->responses = [...($paymentId === 'ch_one' ? [$this->charge, $this->intent] : [$this->intent]), $this->refund, ...($paymentId === 'ch_one' ? [$this->charge, $this->intent] : [$this->intent]), ['object' => 'list', 'url' => '/v1/refunds', 'data' => [$this->refund], 'has_more' => true], ['object' => 'list', 'url' => '/v1/refunds', 'data' => [array_replace($this->refund, ['id' => 're_two'])], 'has_more' => false]];
     $state = $this->gateway->refund($paymentId, 200, 'requested_by_customer', 'refund-key');
     $request = end($this->transport->requests);
-    expect($state->refundId)->toBe('re_one')->and($state->status)->toBe('pending')->and($request['params'][$field])->toBe($paymentId)->and($request['headers'])->toContain('Idempotency-Key: refund-key');
+    expect($state['refundId'])->toBe('re_one')->and($state['status'])->toBe('pending')->and($request['params'][$field])->toBe($paymentId)->and($request['headers'])->toContain('Idempotency-Key: refund-key');
     expect($this->gateway->refunds($paymentId))->toHaveCount(2);
     expect(end($this->transport->requests)['params']['starting_after'])->toBe('re_one');
 })->with([['pi_one', 'payment_intent'], ['ch_one', 'charge']]);
@@ -117,7 +117,7 @@ it('creates refunds against payment references and reads all pages', function (s
 it('reads standalone legacy charges without inventing a PaymentIntent', function (): void {
     $this->transport->responses[] = array_replace($this->charge, ['payment_intent' => null]);
     $state = $this->gateway->payment('ch_one');
-    expect($state->paymentIntentId)->toBeNull()->and($state->capturedAmountMinor)->toBe(1000)->and($state->refundedAmountMinor)->toBe(200);
+    expect($state['paymentIntentId'])->toBeNull()->and($state['capturedAmountMinor'])->toBe(1000)->and($state['refundedAmountMinor'])->toBe(200);
 });
 
 it('rejects mode mismatches before capturing', function (): void {
@@ -136,14 +136,14 @@ it('exposes authoritative authorization limits and card details', function (): v
     $this->intent['latest_charge']['payment_method_details'] = ['type' => 'card', 'card' => ['partial_authorization' => ['status' => 'fully_authorized']]];
     $this->transport->responses[] = $this->intent;
     $state = $this->gateway->payment('pi_one');
-    expect($state->amountCapturableMinor)->toBe(1200)->and($state->paymentMethodType)->toBe('card')->and($state->partialAuthorizationStatus)->toBe('fully_authorized');
+    expect($state['amountCapturableMinor'])->toBe(1200)->and($state['paymentMethodType'])->toBe('card')->and($state['partialAuthorizationStatus'])->toBe('fully_authorized');
 });
 
 it('returns the Checkout recovery operation proof and hosted URL', function (): void {
     $this->session['metadata']['payment_operation_key'] = 'payments:checkout:original';
     $this->transport->responses[] = $this->session;
     $state = $this->gateway->checkout('cs_one');
-    expect($state->operationKey)->toBe('payments:checkout:original')->and($state->url)->toBe('https://checkout.stripe.com/test');
+    expect($state['operationKey'])->toBe('payments:checkout:original')->and($state['url'])->toBe('https://checkout.stripe.com/test');
 });
 
 it('writes and retrieves the persisted refund operation proof through Stripe metadata', function (): void {
@@ -152,6 +152,6 @@ it('writes and retrieves the persisted refund operation proof through Stripe met
     $result = $this->gateway->refund('pi_one', 200, 'requested_by_customer', 'refund-key');
     $request = end($this->transport->requests);
     expect($request['method'])->toBe('post')->and($request['absUrl'])->toEndWith('/v1/refunds')
-        ->and($request['params']['metadata']['payment_operation_key'])->toBe('refund-key')->and($result->operationKey)->toBe('refund-key');
-    expect($this->gateway->refunds('pi_one')[0]->operationKey)->toBe('refund-key');
+        ->and($request['params']['metadata']['payment_operation_key'])->toBe('refund-key')->and($result['operationKey'])->toBe('refund-key');
+    expect($this->gateway->refunds('pi_one')[0]['operationKey'])->toBe('refund-key');
 });

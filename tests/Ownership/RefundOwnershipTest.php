@@ -7,16 +7,14 @@ use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\Actor;
 use Nvl\Ownership\Tests\Fixtures\Company;
-use Nvl\Payments\Actions\RefundPaymentAction;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Testing\FakePaymentGateway;
+use Nvl\Payments\Tests\Fixtures\RefundPaymentAction;
 use Nvl\Payments\Tests\OwnerScopeTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 
 uses(OwnerScopeTestCase::class);
@@ -33,8 +31,8 @@ it('keeps refund and operation references inside the native source payment owner
     {
         public function assertCanManage(Authenticatable $actor, string $operation, OrderPaymentSnapshot $order): void {}
     });
-    FakePaymentGateway::fake(app())->willReturn('payment', new StripePaymentState('pi_paid', 'ch_paid', 'acct_native', false, 1000, 1000, 0, 'eur', 'succeeded', 'automatic'))
-        ->willReturn('refunds', [])->willReturn('refund', new StripeRefundState('re_paid', 'pi_paid', 'ch_paid', 'acct_native', false, 200, 'eur', 'succeeded', 'requested_by_customer'));
+    FakePaymentGateway::fake(app())->willReturn('payment', ['paymentIntentId' => 'pi_paid', 'chargeId' => 'ch_paid', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null])
+        ->willReturn('refunds', [])->willReturn('refund', ['refundId' => 're_paid', 'paymentIntentId' => 'pi_paid', 'chargeId' => 'ch_paid', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 200, 'currency' => 'eur', 'status' => 'succeeded', 'reason' => 'requested_by_customer', 'operationKey' => null]);
     $refund = app(OwnershipRunner::class)->run(Company::query()->findOrFail(7), Actor::query()->findOrFail(1), function () {
         $attempt = PaymentAttempt::query()->create(['order_reference' => 'paid-order', 'order_revision' => 'v1', 'amount_minor' => 1000, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'captured',
             'stripe_payment_intent_id' => 'pi_paid', 'stripe_charge_id' => 'ch_paid', 'stripe_account_id' => 'acct_native', 'stripe_livemode' => false, 'capture_method' => 'automatic', 'captured_amount_minor' => 1000]);

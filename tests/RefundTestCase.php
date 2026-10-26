@@ -4,30 +4,27 @@ declare(strict_types=1);
 
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Str;
-use Nvl\Payments\Actions\RefundPaymentAction;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Tests\Fixtures\RefundPaymentAction;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\RefundSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 
 require_once __DIR__.'/PaymentsTestCase.php';
 
-function refundPayment(int $amount = 700, ?string $uuid = null, string $reason = 'requested_by_customer', ?string $note = null, ?string $attemptId = null): RefundSnapshot
+function refundPayment(int $amount = 700, ?string $uuid = null, string $reason = 'requested_by_customer', ?string $note = null, ?string $attemptId = null): array
 {
     return app(RefundPaymentAction::class)->execute($attemptId ?? PaymentAttempt::sole()->id, new GenericUser(['id' => 'admin']), $amount, $reason, $note, $uuid ?? (string) Str::uuid());
 }
 
-function refundPaymentState(int $refunded = 0, int $captured = 1200): StripePaymentState
+function refundPaymentState(int $refunded = 0, int $captured = 1200): array
 {
-    return new StripePaymentState('pi_refund', 'ch_refund', 'acct_test', false, 1200, $captured, $refunded, 'eur', $captured === 0 ? 'requires_capture' : 'succeeded', 'automatic');
+    return ['paymentIntentId' => 'pi_refund', 'chargeId' => 'ch_refund', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1200, 'capturedAmountMinor' => $captured, 'refundedAmountMinor' => $refunded, 'currency' => 'eur', 'status' => $captured === 0 ? 'requires_capture' : 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
 }
 
-function remoteRefund(string $id = 're_test', int $amount = 700, string $status = 'succeeded'): StripeRefundState
+function remoteRefund(string $id = 're_test', int $amount = 700, string $status = 'succeeded'): array
 {
-    return new StripeRefundState($id, 'pi_refund', 'ch_refund', 'acct_test', false, $amount, 'eur', $status, 'requested_by_customer');
+    return ['refundId' => $id, 'paymentIntentId' => 'pi_refund', 'chargeId' => 'ch_refund', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => $amount, 'currency' => 'eur', 'status' => $status, 'reason' => 'requested_by_customer', 'operationKey' => null];
 }
 
 function setupRefundHost(): void

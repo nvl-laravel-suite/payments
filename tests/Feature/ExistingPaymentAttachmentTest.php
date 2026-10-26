@@ -7,7 +7,6 @@ use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
-use Nvl\Payments\Actions\AttachExistingPaymentAction;
 use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
@@ -19,21 +18,20 @@ use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\DenyExistingPaymentOwnership;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\DenyPaymentOrderProvider;
+use Nvl\Payments\Tests\Fixtures\AttachExistingPaymentAction;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\PaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Support\Exceptions\BindingRequiredException;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
 uses(PaymentsSchemaTestCase::class);
 
-function attachmentState(?string $intent = 'pi_existing', ?string $charge = 'ch_existing', string $account = 'acct_test', bool $live = false, int $amount = 1200, int $captured = 1200, int $refunded = 0, string $currency = 'eur', string $status = 'succeeded'): StripePaymentState
+function attachmentState(?string $intent = 'pi_existing', ?string $charge = 'ch_existing', string $account = 'acct_test', bool $live = false, int $amount = 1200, int $captured = 1200, int $refunded = 0, string $currency = 'eur', string $status = 'succeeded'): array
 {
-    return new StripePaymentState($intent, $charge, $account, $live, $amount, $captured, $refunded, $currency, $status, 'automatic');
+    return ['paymentIntentId' => $intent, 'chargeId' => $charge, 'accountId' => $account, 'livemode' => $live, 'amountMinor' => $amount, 'capturedAmountMinor' => $captured, 'refundedAmountMinor' => $refunded, 'currency' => $currency, 'status' => $status, 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
 }
 
-function attachPayment(string $uuid, string $reference = 'pi_existing', string $actor = 'admin', string $order = 'order-1'): PaymentSnapshot
+function attachPayment(string $uuid, string $reference = 'pi_existing', string $actor = 'admin', string $order = 'order-1'): array
 {
     return app(AttachExistingPaymentAction::class)->execute($order, new GenericUser(['id' => $actor]), $reference, $uuid);
 }
@@ -47,7 +45,7 @@ beforeEach(function (): void {
     $access->shouldReceive('assertCanManage')->withArgs(fn ($actor, $operation, $order) => $operation === 'attach_existing' && $order->reference === 'order-1');
     app()->instance(PaymentManagementAccess::class, $access);
     $this->ownership = Mockery::mock(ExistingPaymentOwnership::class);
-    $this->ownership->shouldReceive('assertOwned')->withArgs(fn ($order, $payment) => $order->reference === 'order-1' && $payment->chargeId === 'ch_existing')->byDefault();
+    $this->ownership->shouldReceive('assertOwned')->withArgs(fn ($order, $payment) => $order->reference === 'order-1' && $payment['chargeId'] === 'ch_existing')->byDefault();
     app()->instance(ExistingPaymentOwnership::class, $this->ownership);
     $this->gateway = Mockery::mock(PaymentGateway::class);
     app()->instance(PaymentGateway::class, $this->gateway);
@@ -59,17 +57,17 @@ it('attaches canonical payment facts and replays its completed operation without
         expect((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0)
             ->and(PaymentOperation::sole()->status)->toBe('completed');
     });
-    $this->gateway->shouldReceive('resolveExisting')->once()->with($reference)->andReturnUsing(function () use ($intent): StripePaymentState {
+    $this->gateway->shouldReceive('resolveExisting')->once()->with($reference)->andReturnUsing(function () use ($intent): array {
         expect((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0)
             ->and(PaymentOperation::sole()->status)->toBe('reserved');
 
         return attachmentState(intent: $intent, refunded: 200);
     });
     $result = attachPayment($this->uuid, $reference);
-    expect($result->origin)->toBe('attached')->and($result->status)->toBe('partially_refunded')
-        ->and($result->paymentIntentId)->toBe($intent)->and($result->chargeId)->toBe('ch_existing')
-        ->and($result->capturedAmountMinor)->toBe(1200)->and($result->refundedAmountMinor)->toBe(200)
-        ->and($result->lastSyncedAt)->not->toBeNull()->and($result->orderReference)->toBe('order-1')
+    expect($result['origin'])->toBe('attached')->and($result['status'])->toBe('partially_refunded')
+        ->and($result['paymentIntentId'])->toBe($intent)->and($result['chargeId'])->toBe('ch_existing')
+        ->and($result['capturedAmountMinor'])->toBe(1200)->and($result['refundedAmountMinor'])->toBe(200)
+        ->and($result['lastSyncedAt'])->not->toBeNull()->and($result['orderReference'])->toBe('order-1')
         ->and(attachPayment($this->uuid, $reference))->toEqual($result)->and(PaymentAttempt::count())->toBe(1);
 })->with([['pi_existing', 'pi_existing'], ['ch_existing', 'pi_existing'], ['txn_existing', 'pi_existing'], ['ch_existing', null]]);
 
@@ -82,7 +80,7 @@ it('requires each host contract and never treats matching amount as ownership', 
     expect(PaymentAttempt::count())->toBe(0)->and(PaymentOperation::where('status', 'completed')->count())->toBe(0);
 })->with([[PaymentOrderProvider::class, DenyPaymentOrderProvider::class], [PaymentManagementAccess::class, DenyPaymentManagementAccess::class], [ExistingPaymentOwnership::class, DenyExistingPaymentOwnership::class]]);
 
-it('rejects mismatched or invalid canonical financial facts', function (StripePaymentState $state): void {
+it('rejects mismatched or invalid canonical financial facts', function (array $state): void {
     $this->gateway->shouldReceive('resolveExisting')->once()->andReturn($state);
     expect(fn () => attachPayment($this->uuid))->toThrow(DomainException::class);
     expect(PaymentAttempt::count())->toBe(0)->and(PaymentOperation::sole()->status)->toBe('unknown');
@@ -117,7 +115,7 @@ it('preserves rejection of refund and payout balance transactions', function (st
 })->with(['txn_refund', 'txn_payout']);
 
 it('rejects an already attached canonical intent or charge including competing attachment completion', function (?string $intent, ?string $charge): void {
-    $this->gateway->shouldReceive('resolveExisting')->once()->andReturnUsing(function () use ($intent, $charge): StripePaymentState {
+    $this->gateway->shouldReceive('resolveExisting')->once()->andReturnUsing(function () use ($intent, $charge): array {
         PaymentAttempt::create(['order_reference' => 'other-order', 'order_revision' => 'v1', 'amount_minor' => 1200, 'currency' => 'EUR', 'origin' => 'attached', 'state' => 'captured', 'stripe_payment_intent_id' => $intent, 'stripe_charge_id' => $charge]);
 
         return attachmentState();

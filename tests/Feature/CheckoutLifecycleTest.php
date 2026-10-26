@@ -6,19 +6,16 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Nvl\Payments\Actions\ReconcilePaymentAction;
-use Nvl\Payments\Actions\StartCheckoutAction;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\PaymentOperationJournal;
+use Nvl\Payments\Tests\Fixtures\ReconcilePaymentAction;
+use Nvl\Payments\Tests\Fixtures\StartCheckoutAction;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
-use Nvl\Payments\ValueObjects\HostedCheckout;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripeCheckoutState;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
 
@@ -31,15 +28,15 @@ function checkoutOrder(string $revision = 'v1', bool $payable = true): OrderPaym
 }
 
 /** Invoke the public checkout use case. */
-function startTestCheckout(string $success = 'https://shop.test/success', string $cancel = 'https://shop.test/cancel'): HostedCheckout
+function startTestCheckout(string $success = 'https://shop.test/success', string $cancel = 'https://shop.test/cancel'): array
 {
     return app(StartCheckoutAction::class)->execute('order-1', new GenericUser(['id' => 'admin-1']), $success, $cancel);
 }
 
 /** Build authoritative provider session facts. */
-function checkoutState(string $status = 'open', string $payment = 'unpaid'): StripeCheckoutState
+function checkoutState(string $status = 'open', string $payment = 'unpaid'): array
 {
-    return new StripeCheckoutState('cs_1', null, 'acct_test', false, 1299, 'jpy', $status, $payment, 'order-1', 'v1', CarbonImmutable::now()->addHour());
+    return ['sessionId' => 'cs_1', 'paymentIntentId' => null, 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'currency' => 'jpy', 'status' => $status, 'paymentStatus' => $payment, 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => null, 'url' => null];
 }
 
 beforeEach(function (): void {
@@ -55,19 +52,19 @@ beforeEach(function (): void {
 });
 
 it('reserves before Stripe outside transactions and reuses the original hosted URL and JPY minor units', function (): void {
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry, $key): HostedCheckout {
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry, $key): array {
         expect((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0)
             ->and(PaymentAttempt::sole()->reservation_key)->not->toBeNull()
             ->and(PaymentOperation::sole()->status)->toBe('reserved')
             ->and(PaymentOperation::sole()->idempotency_key)->toBe($key)
             ->and($order->amountMinor)->toBe(1299);
 
-        return new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', $expiry);
+        return ['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => $expiry];
     });
     $this->gateway->shouldReceive('checkout')->once()->with('cs_1')->andReturn(checkoutState());
     $first = startTestCheckout();
     $again = startTestCheckout();
-    expect($again->url)->toBe($first->url)->and($again->sessionId)->toBe('cs_1')
+    expect($again['url'])->toBe($first['url'])->and($again['sessionId'])->toBe('cs_1')
         ->and(PaymentAttempt::count())->toBe(1)->and(PaymentOperation::sole()->status)->toBe('completed');
 });
 
@@ -79,10 +76,10 @@ it('keeps failed or ambiguous creates reserved and blocks subsequent creates', f
 });
 
 it('blocks competing requests while the first remote call is running', function (): void {
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry): HostedCheckout {
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry): array {
         expect(fn () => startTestCheckout())->toThrow(DomainException::class);
 
-        return new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', $expiry);
+        return ['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => $expiry];
     });
     startTestCheckout();
     expect(PaymentAttempt::count())->toBe(1);
@@ -109,20 +106,20 @@ it('rejects either return URL outside the configured HTTPS hosts', function (str
 
 it('replaces an expired session only after authoritative confirmation', function (): void {
     $this->gateway->shouldReceive('createCheckout')->twice()->andReturn(
-        new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->subMinute()),
-        new HostedCheckout('cs_2', 'https://checkout.stripe.com/two', CarbonImmutable::now()->addHour()),
+        ['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->subMinute()],
+        ['sessionId' => 'cs_2', 'url' => 'https://checkout.stripe.com/two', 'expiresAt' => CarbonImmutable::now()->addHour()],
     );
     $this->gateway->shouldReceive('checkout')->once()->andReturn(checkoutState('expired'));
     startTestCheckout();
-    expect(startTestCheckout()->sessionId)->toBe('cs_2')
+    expect(startTestCheckout()['sessionId'])->toBe('cs_2')
         ->and(PaymentAttempt::whereNotNull('reservation_key')->count())->toBe(1)
         ->and(PaymentAttempt::where('stripe_checkout_session_id', 'cs_1')->sole()->state)->toBe('expired');
 });
 
 it('expires and verifies an old revision before issuing its replacement', function (): void {
     $this->gateway->shouldReceive('createCheckout')->twice()->andReturn(
-        new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->addHour()),
-        new HostedCheckout('cs_2', 'https://checkout.stripe.com/two', CarbonImmutable::now()->addHour()),
+        ['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()],
+        ['sessionId' => 'cs_2', 'url' => 'https://checkout.stripe.com/two', 'expiresAt' => CarbonImmutable::now()->addHour()],
     );
     startTestCheckout();
     $this->orders->shouldReceive('resolve')->andReturn(checkoutOrder('v2'));
@@ -132,11 +129,11 @@ it('expires and verifies an old revision before issuing its replacement', functi
             ->and(PaymentAttempt::sole()->reservation_key)->not->toBeNull()
             ->and(PaymentOperation::where('type', 'expire_checkout')->sole()->status)->toBe('reserved');
     });
-    expect(startTestCheckout()->sessionId)->toBe('cs_2')->and(PaymentAttempt::count())->toBe(2);
+    expect(startTestCheckout()['sessionId'])->toBe('cs_2')->and(PaymentAttempt::count())->toBe(2);
 });
 
 it('records an exception when the old revision is already paid', function (): void {
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()]);
     startTestCheckout();
     $this->orders->shouldReceive('resolve')->andReturn(checkoutOrder('v2'));
     $this->gateway->shouldReceive('checkout')->once()->andReturn(checkoutState('complete', 'paid'));
@@ -145,7 +142,7 @@ it('records an exception when the old revision is already paid', function (): vo
 });
 
 it('keeps uncertain expiry blocked pending reconciliation', function (): void {
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()]);
     startTestCheckout();
     $this->orders->shouldReceive('resolve')->andReturn(checkoutOrder('v2'));
     $this->gateway->shouldReceive('checkout')->once()->andReturn(checkoutState());
@@ -181,7 +178,7 @@ it('resolves unknown operations idempotently and never regresses a completed res
 });
 
 it('retains the reservation if payment wins the expiry race', function (): void {
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()]);
     startTestCheckout();
     $this->orders->shouldReceive('resolve')->andReturn(checkoutOrder('v2'));
     $this->gateway->shouldReceive('checkout')->twice()->andReturn(checkoutState(), checkoutState('complete', 'paid'));
@@ -206,7 +203,7 @@ it('reserves one Session across two competing SQLite file processes', function (
     $directory = sys_get_temp_dir().'/payments-checkout-'.Str::uuid();
     mkdir($directory);
     touch($directory.'/database.sqlite');
-    config(['database.connections.checkout_race' => array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000]), 'nvl-payments.connection' => 'checkout_race']);
+    config(['database.connections.checkout_race' => array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000, 'transaction_mode' => 'IMMEDIATE']), 'nvl-payments.connection' => 'checkout_race']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
     $migration->up();
     $waitFor = static function (Closure $condition): void {
@@ -230,11 +227,11 @@ it('reserves one Session across two competing SQLite file processes', function (
                 try {
                     DB::purge('checkout_race');
                     $gateway = Mockery::mock(PaymentGateway::class);
-                    $gateway->shouldReceive('createCheckout')->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry) use ($directory, $waitFor): HostedCheckout {
+                    $gateway->shouldReceive('createCheckout')->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry) use ($directory, $waitFor): array {
                         file_put_contents($directory.'/creates', "create\n", FILE_APPEND | LOCK_EX);
                         $waitFor(fn () => file_exists($directory.'/release'));
 
-                        return new HostedCheckout('cs_race', 'https://checkout.stripe.com/race', $expiry);
+                        return ['sessionId' => 'cs_race', 'url' => 'https://checkout.stripe.com/race', 'expiresAt' => $expiry];
                     });
                     app()->instance(PaymentGateway::class, $gateway);
                     touch($directory.'/ready-'.$worker);
@@ -259,7 +256,7 @@ it('reserves one Session across two competing SQLite file processes', function (
         touch($directory.'/release');
         foreach ($children as $pid) {
             pcntl_waitpid($pid, $status);
-            expect(pcntl_wexitstatus($status))->toBe(0);
+            expect(pcntl_wexitstatus($status))->toBe(0, implode("\n", array_map(file_get_contents(...), glob($directory.'/result-*'))));
         }
         $results = [file_get_contents($directory.'/result-0'), file_get_contents($directory.'/result-1')];
         sort($results);
@@ -293,11 +290,11 @@ it('rejects actors without a stable scalar identifier before reserving', functio
 });
 
 it('keeps mismatched remote session facts blocked', function (string $field, mixed $value): void {
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()]);
     startTestCheckout();
-    $values = get_object_vars(checkoutState('expired'));
+    $values = checkoutState('expired');
     $values[$field] = $value;
-    $this->gateway->shouldReceive('checkout')->once()->andReturn(new StripeCheckoutState(...$values));
+    $this->gateway->shouldReceive('checkout')->once()->andReturn(array_replace(['operationKey' => null, 'url' => null], $values));
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect(PaymentAttempt::sole()->state)->toBe('unknown')->and(PaymentAttempt::sole()->reservation_key)->not->toBeNull();
@@ -307,31 +304,31 @@ it('keeps mismatched remote session facts blocked', function (string $field, mix
 ]);
 
 it('replaces a reconciled async failed Checkout only after its completed flow cannot collect', function (): void {
-    $this->gateway->shouldReceive('createCheckout')->twice()->andReturn(new HostedCheckout('cs_1', 'https://checkout.stripe.com/one', CarbonImmutable::now()->addHour()), new HostedCheckout('cs_2', 'https://checkout.stripe.com/two', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('createCheckout')->twice()->andReturn(['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()], ['sessionId' => 'cs_2', 'url' => 'https://checkout.stripe.com/two', 'expiresAt' => CarbonImmutable::now()->addHour()]);
     startTestCheckout();
     $attempt = PaymentAttempt::sole();
     $attempt->update(['stripe_payment_intent_id' => 'pi_failed', 'state' => 'processing']);
-    $this->gateway->shouldReceive('checkout')->andReturn(new StripeCheckoutState('cs_1', 'pi_failed', 'acct_test', false, 1299, 'jpy', 'complete', 'unpaid', 'order-1', 'v1', CarbonImmutable::now()->addHour()));
-    $this->gateway->shouldReceive('payment')->andReturn(new StripePaymentState('pi_failed', null, 'acct_test', false, 1299, 0, 0, 'jpy', 'requires_payment_method', 'automatic', 0));
+    $this->gateway->shouldReceive('checkout')->andReturn(['sessionId' => 'cs_1', 'paymentIntentId' => 'pi_failed', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'currency' => 'jpy', 'status' => 'complete', 'paymentStatus' => 'unpaid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => null, 'url' => null]);
+    $this->gateway->shouldReceive('payment')->andReturn(['paymentIntentId' => 'pi_failed', 'chargeId' => null, 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'capturedAmountMinor' => 0, 'refundedAmountMinor' => 0, 'currency' => 'jpy', 'status' => 'requires_payment_method', 'captureMethod' => 'automatic', 'amountCapturableMinor' => 0, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
     app(ReconcilePaymentAction::class)->execute($attempt->id);
     expect($attempt->refresh()->state)->toBe('failed');
-    expect(startTestCheckout()->sessionId)->toBe('cs_2')->and($attempt->refresh()->reservation_key)->toBeNull()
+    expect(startTestCheckout()['sessionId'])->toBe('cs_2')->and($attempt->refresh()->reservation_key)->toBeNull()
         ->and(PaymentAttempt::whereNotNull('reservation_key')->count())->toBe(1);
 });
 
 it('keeps a failed Checkout reserved when fresh payment facts are unsafe', function (string $status, int $captured, ?int $capturable): void {
     $attempt = PaymentAttempt::create(['order_reference' => 'order-1', 'order_revision' => 'v1', 'amount_minor' => 1299, 'currency' => 'JPY', 'origin' => 'checkout', 'state' => 'failed', 'reservation_key' => hash('sha256', 'order-1'), 'stripe_checkout_session_id' => 'cs_1', 'stripe_payment_intent_id' => 'pi_failed', 'capture_method' => 'automatic']);
-    $this->gateway->shouldReceive('checkout')->andReturn(new StripeCheckoutState('cs_1', 'pi_failed', 'acct_test', false, 1299, 'jpy', 'complete', 'unpaid', 'order-1', 'v1', CarbonImmutable::now()->addHour()));
-    $this->gateway->shouldReceive('payment')->andReturn(new StripePaymentState('pi_failed', null, 'acct_test', false, 1299, $captured, 0, 'jpy', $status, 'automatic', $capturable));
+    $this->gateway->shouldReceive('checkout')->andReturn(['sessionId' => 'cs_1', 'paymentIntentId' => 'pi_failed', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'currency' => 'jpy', 'status' => 'complete', 'paymentStatus' => 'unpaid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => null, 'url' => null]);
+    $this->gateway->shouldReceive('payment')->andReturn(['paymentIntentId' => 'pi_failed', 'chargeId' => null, 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'capturedAmountMinor' => $captured, 'refundedAmountMinor' => 0, 'currency' => 'jpy', 'status' => $status, 'captureMethod' => 'automatic', 'amountCapturableMinor' => $capturable, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect($attempt->refresh()->reservation_key)->not->toBeNull()->and(PaymentAttempt::count())->toBe(1);
 })->with([['processing', 0, 0], ['requires_action', 0, 0], ['requires_capture', 0, 1299], ['succeeded', 1299, 0], ['requires_payment_method', 0, null]]);
 
 it('expires a failed open Checkout durably and retains its key through timeout recovery', function (): void {
     $attempt = PaymentAttempt::create(['order_reference' => 'order-1', 'order_revision' => 'v1', 'amount_minor' => 1299, 'currency' => 'JPY', 'origin' => 'checkout', 'state' => 'failed', 'reservation_key' => hash('sha256', 'order-1'), 'stripe_checkout_session_id' => 'cs_1', 'stripe_payment_intent_id' => 'pi_failed', 'capture_method' => 'automatic']);
-    $session = fn (string $status) => new StripeCheckoutState('cs_1', 'pi_failed', 'acct_test', false, 1299, 'jpy', $status, 'unpaid', 'order-1', 'v1', CarbonImmutable::now()->addHour());
+    $session = fn (string $status) => ['sessionId' => 'cs_1', 'paymentIntentId' => 'pi_failed', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'currency' => 'jpy', 'status' => $status, 'paymentStatus' => 'unpaid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => null, 'url' => null];
     $this->gateway->shouldReceive('checkout')->andReturn($session('open'), $session('open'), $session('open'), $session('expired'));
-    $this->gateway->shouldReceive('payment')->andReturn(new StripePaymentState('pi_failed', null, 'acct_test', false, 1299, 0, 0, 'jpy', 'requires_payment_method', 'automatic', 0));
+    $this->gateway->shouldReceive('payment')->andReturn(['paymentIntentId' => 'pi_failed', 'chargeId' => null, 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'capturedAmountMinor' => 0, 'refundedAmountMinor' => 0, 'currency' => 'jpy', 'status' => 'requires_payment_method', 'captureMethod' => 'automatic', 'amountCapturableMinor' => 0, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
     $keys = [];
     $this->gateway->shouldReceive('expireCheckout')->twice()->andReturnUsing(function ($id, $key) use (&$keys): void {
         $keys[] = $key;
@@ -343,18 +340,18 @@ it('expires a failed open Checkout durably and retains its key through timeout r
     expect(fn () => startTestCheckout())->toThrow(RuntimeException::class);
     expect($attempt->refresh()->reservation_key)->not->toBeNull()->and(PaymentOperation::sole()->status)->toBe('unknown');
     app(ReconcilePaymentAction::class)->execute($attempt->id);
-    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(new HostedCheckout('cs_2', 'https://checkout.stripe.com/two', CarbonImmutable::now()->addHour()));
-    expect(startTestCheckout()->sessionId)->toBe('cs_2')->and($keys[0])->toBe($keys[1]);
+    $this->gateway->shouldReceive('createCheckout')->once()->andReturn(['sessionId' => 'cs_2', 'url' => 'https://checkout.stripe.com/two', 'expiresAt' => CarbonImmutable::now()->addHour()]);
+    expect(startTestCheckout()['sessionId'])->toBe('cs_2')->and($keys[0])->toBe($keys[1]);
     expect($attempt->refresh()->reservation_key)->toBeNull();
 });
 
 it('does not release a failed Checkout when payment races its final verification', function (): void {
     $attempt = PaymentAttempt::create(['order_reference' => 'order-1', 'order_revision' => 'v1', 'amount_minor' => 1299, 'currency' => 'JPY', 'origin' => 'checkout', 'state' => 'failed', 'reservation_key' => hash('sha256', 'order-1'), 'stripe_checkout_session_id' => 'cs_1', 'stripe_payment_intent_id' => 'pi_failed', 'capture_method' => 'automatic']);
-    $this->gateway->shouldReceive('checkout')->andReturn(new StripeCheckoutState('cs_1', 'pi_failed', 'acct_test', false, 1299, 'jpy', 'complete', 'unpaid', 'order-1', 'v1', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('checkout')->andReturn(['sessionId' => 'cs_1', 'paymentIntentId' => 'pi_failed', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'currency' => 'jpy', 'status' => 'complete', 'paymentStatus' => 'unpaid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => null, 'url' => null]);
     $this->gateway->shouldReceive('payment')->andReturnUsing(function () use ($attempt) {
         $attempt->update(['state' => 'captured', 'captured_amount_minor' => 1299]);
 
-        return new StripePaymentState('pi_failed', null, 'acct_test', false, 1299, 0, 0, 'jpy', 'requires_payment_method', 'automatic', 0);
+        return ['paymentIntentId' => 'pi_failed', 'chargeId' => null, 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'capturedAmountMinor' => 0, 'refundedAmountMinor' => 0, 'currency' => 'jpy', 'status' => 'requires_payment_method', 'captureMethod' => 'automatic', 'amountCapturableMinor' => 0, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
     });
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect($attempt->refresh()->state)->toBe('captured')->and($attempt->reservation_key)->not->toBeNull()->and(PaymentAttempt::count())->toBe(1);
@@ -362,13 +359,13 @@ it('does not release a failed Checkout when payment races its final verification
 
 it('rejects concurrent identity changes before releasing a failed Checkout', function (): void {
     $attempt = PaymentAttempt::create(['order_reference' => 'order-1', 'order_revision' => 'v1', 'amount_minor' => 1299, 'currency' => 'JPY', 'origin' => 'checkout', 'state' => 'failed', 'reservation_key' => hash('sha256', 'order-1'), 'stripe_checkout_session_id' => 'cs_1', 'stripe_payment_intent_id' => 'pi_failed', 'capture_method' => 'automatic']);
-    $this->gateway->shouldReceive('checkout')->andReturn(new StripeCheckoutState('cs_1', 'pi_failed', 'acct_test', false, 1299, 'jpy', 'complete', 'unpaid', 'order-1', 'v1', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('checkout')->andReturn(['sessionId' => 'cs_1', 'paymentIntentId' => 'pi_failed', 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'currency' => 'jpy', 'status' => 'complete', 'paymentStatus' => 'unpaid', 'orderReference' => 'order-1', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => null, 'url' => null]);
     $this->gateway->shouldReceive('payment')->andReturnUsing(function () use ($attempt) {
         $attempt->update(['stripe_payment_intent_id' => 'pi_changed']);
 
-        return new StripePaymentState('pi_failed', null, 'acct_test', false, 1299, 0, 0, 'jpy', 'requires_payment_method', 'automatic', 0);
+        return ['paymentIntentId' => 'pi_failed', 'chargeId' => null, 'accountId' => 'acct_test', 'livemode' => false, 'amountMinor' => 1299, 'capturedAmountMinor' => 0, 'refundedAmountMinor' => 0, 'currency' => 'jpy', 'status' => 'requires_payment_method', 'captureMethod' => 'automatic', 'amountCapturableMinor' => 0, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
     });
-    $this->gateway->shouldReceive('createCheckout')->andReturn(new HostedCheckout('cs_2', 'https://checkout.stripe.com/two', CarbonImmutable::now()->addHour()));
+    $this->gateway->shouldReceive('createCheckout')->andReturn(['sessionId' => 'cs_2', 'url' => 'https://checkout.stripe.com/two', 'expiresAt' => CarbonImmutable::now()->addHour()]);
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect($attempt->refresh()->reservation_key)->not->toBeNull();
 });

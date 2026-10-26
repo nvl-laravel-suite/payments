@@ -7,17 +7,15 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\Actor;
 use Nvl\Ownership\Tests\Fixtures\Company;
-use Nvl\Payments\Actions\RecoverCheckoutAction;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Testing\FakePaymentGateway;
+use Nvl\Payments\Tests\Fixtures\RecoverCheckoutAction;
 use Nvl\Payments\Tests\LegacyOwnerScopeTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripeCheckoutState;
-use Nvl\Payments\ValueObjects\StripePaymentState;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 
 uses(LegacyOwnerScopeTestCase::class);
@@ -34,8 +32,8 @@ it('recovers a pending pre-cutover operation with its original provider key with
     {
         public function assertCanManage(Authenticatable $actor, string $operation, OrderPaymentSnapshot $order): void {}
     });
-    $gateway = FakePaymentGateway::fake(app())->willReturn('checkout', new StripeCheckoutState('cs_old', 'pi_old', 'acct_native', false, 1000, 'eur', 'complete', 'paid', 'old-order', 'v1', CarbonImmutable::now()->addHour(), LegacyOwnerScopeTestCase::OperationKey))
-        ->willReturn('payment', new StripePaymentState('pi_old', 'ch_old', 'acct_native', false, 1000, 1000, 0, 'eur', 'succeeded', 'automatic'))->willReturn('refunds', []);
+    $gateway = FakePaymentGateway::fake(app())->willReturn('checkout', ['sessionId' => 'cs_old', 'paymentIntentId' => 'pi_old', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'currency' => 'eur', 'status' => 'complete', 'paymentStatus' => 'paid', 'orderReference' => 'old-order', 'orderRevision' => 'v1', 'expiresAt' => CarbonImmutable::now()->addHour(), 'operationKey' => LegacyOwnerScopeTestCase::OperationKey, 'url' => null])
+        ->willReturn('payment', ['paymentIntentId' => 'pi_old', 'chargeId' => 'ch_old', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null])->willReturn('refunds', []);
     app(OwnershipRunner::class)->run(Company::query()->findOrFail(7), Actor::query()->findOrFail(1), function (): void {
         app(RecoverCheckoutAction::class)->execute(LegacyOwnerScopeTestCase::Attempt, 'cs_old', Actor::query()->findOrFail(1));
         $operation = PaymentOperation::query()->sole();

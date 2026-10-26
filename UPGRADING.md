@@ -1,5 +1,11 @@
 # Upgrading NVL Payments
 
+## NVL Light native service boundary
+
+Target Laravel 13 and Testbench 11. Replace package Actions and thin workflow interfaces with `PaymentCheckout`, `PaymentAuthorizations`, `PaymentRefunds`, `PaymentReconciliation`, `PaymentWebhooks` and `PaymentReadService`. Consumers own their Actions, data and HTTP routes. Mutation services return refreshed models; checkout/provider/read facts are documented native arrays. Refund takes `(PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Authenticatable $actor)` and returns `PaymentRefund`.
+
+Register a consumer webhook route calling `PaymentWebhooks::process($rawPayload, $signature)`; the service now owns signature verification. Remove package route/controller/middleware imports, passive result value-object imports, old workflow bindings and the retired Tenancy bridge. Preserve existing operation UUIDs, Stripe metadata, journals and owner adoption. The validated `OrderPaymentSnapshot` retains its exact JSON fingerprint shape. See the current README for integration. Earlier version notes below describe historical releases.
+
 ## 6.0.1 consolidation patch
 
 When Ownership is installed, this package requires version 6.0.1 or later. Ownership remains optional. Update the installed NVL dependency closure together so Composer can select compatible patches.

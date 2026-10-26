@@ -8,7 +8,6 @@ use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 
 require_once __DIR__.'/../RefundTestCase.php';
 uses(PaymentsSchemaTestCase::class);
@@ -25,7 +24,7 @@ it('atomically reserves only one refund when competing processes would exceed ca
     mkdir($directory);
     touch($directory.'/database.sqlite');
     $settings = $driver === 'sqlite'
-        ? array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000])
+        ? array_replace(config('database.connections.sqlite'), ['database' => $directory.'/database.sqlite', 'busy_timeout' => 5000, 'transaction_mode' => 'IMMEDIATE'])
         : array_replace(config('database.connections.pgsql'), ['host' => getenv('PAYMENTS_TEST_PG_HOST') ?: '127.0.0.1', 'port' => getenv('PAYMENTS_TEST_PG_PORT') ?: '5432', 'database' => getenv('PAYMENTS_TEST_PG_DATABASE'), 'username' => getenv('PAYMENTS_TEST_PG_USERNAME') ?: 'postgres', 'password' => getenv('PAYMENTS_TEST_PG_PASSWORD') ?: '']);
     config(['database.connections.refund_race' => $settings, 'nvl-payments.connection' => 'refund_race']);
     $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
@@ -60,7 +59,7 @@ it('atomically reserves only one refund when competing processes would exceed ca
 
                         return [];
                     });
-                    $gateway->shouldReceive('refund')->andReturnUsing(function () use ($directory, $waitFor, $worker): StripeRefundState {
+                    $gateway->shouldReceive('refund')->andReturnUsing(function () use ($directory, $waitFor, $worker): array {
                         file_put_contents($directory.'/refunds', "refund\n", FILE_APPEND | LOCK_EX);
                         $waitFor(fn () => file_exists($directory.'/release'));
 
@@ -85,7 +84,7 @@ it('atomically reserves only one refund when competing processes would exceed ca
         touch($directory.'/release');
         foreach ($children as $pid) {
             pcntl_waitpid($pid, $status);
-            expect(pcntl_wexitstatus($status))->toBe(0);
+            expect(pcntl_wexitstatus($status))->toBe(0, implode("\n", array_map(file_get_contents(...), glob($directory.'/result-*'))));
         }
         $results = [file_get_contents($directory.'/result-0'), file_get_contents($directory.'/result-1')];
         sort($results);

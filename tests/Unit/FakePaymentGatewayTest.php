@@ -4,21 +4,17 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Nvl\Payments\Testing\FakePaymentGateway;
-use Nvl\Payments\ValueObjects\HostedCheckout;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
-use Nvl\Payments\ValueObjects\StripeCheckoutState;
-use Nvl\Payments\ValueObjects\StripePaymentState;
-use Nvl\Payments\ValueObjects\StripeRefundState;
 use Nvl\Support\Testing\FakeCall;
 use Nvl\Support\Testing\UnscriptedFakeCall;
 
 dataset('scripted payment gateway methods', function (): array {
     $expiry = CarbonImmutable::parse('2030-01-01T12:00:00+00:00');
     $order = new OrderPaymentSnapshot('host-order-42', 'revision-1', 1200, 'EUR', 'Order', null, true);
-    $checkout = new HostedCheckout('cs_42', 'https://checkout.example.test/42', $expiry);
-    $state = new StripeCheckoutState('cs_42', 'pi_42', 'acct_42', false, 1200, 'EUR', 'complete', 'paid', 'host-order-42', 'revision-1', $expiry);
-    $payment = new StripePaymentState('pi_42', 'ch_42', 'acct_42', false, 1200, 1200, 0, 'EUR', 'succeeded', 'automatic');
-    $refund = new StripeRefundState('re_42', 'pi_42', 'ch_42', 'acct_42', false, 400, 'EUR', 'succeeded', null);
+    $checkout = ['sessionId' => 'cs_42', 'url' => 'https://checkout.example.test/42', 'expiresAt' => $expiry];
+    $state = ['sessionId' => 'cs_42', 'paymentIntentId' => 'pi_42', 'accountId' => 'acct_42', 'livemode' => false, 'amountMinor' => 1200, 'currency' => 'EUR', 'status' => 'complete', 'paymentStatus' => 'paid', 'orderReference' => 'host-order-42', 'orderRevision' => 'revision-1', 'expiresAt' => $expiry, 'operationKey' => null, 'url' => null];
+    $payment = ['paymentIntentId' => 'pi_42', 'chargeId' => 'ch_42', 'accountId' => 'acct_42', 'livemode' => false, 'amountMinor' => 1200, 'capturedAmountMinor' => 1200, 'refundedAmountMinor' => 0, 'currency' => 'EUR', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
+    $refund = ['refundId' => 're_42', 'paymentIntentId' => 'pi_42', 'chargeId' => 'ch_42', 'accountId' => 'acct_42', 'livemode' => false, 'amountMinor' => 400, 'currency' => 'EUR', 'status' => 'succeeded', 'reason' => null, 'operationKey' => null];
 
     return [
         'checkout creation' => ['createCheckout', [$order, 'automatic', '/success', '/cancel', $expiry, 'operation-42'], $checkout],
@@ -71,7 +67,7 @@ test('payment fake does not execute scripted closures or leak responses to anoth
         $executed = true;
     });
 
-    expect(fn (): StripePaymentState => $first->payment('pi_42'))->toThrow(TypeError::class)
+    expect(fn (): array => $first->payment('pi_42'))->toThrow(TypeError::class)
         ->and($executed)->toBeFalse()
-        ->and(fn (): StripePaymentState => (new FakePaymentGateway)->payment('pi_42'))->toThrow(UnscriptedFakeCall::class);
+        ->and(fn (): array => (new FakePaymentGateway)->payment('pi_42'))->toThrow(UnscriptedFakeCall::class);
 });
