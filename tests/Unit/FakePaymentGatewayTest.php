@@ -71,3 +71,9 @@ test('payment fake does not execute scripted closures or leak responses to anoth
         ->and($executed)->toBeFalse()
         ->and(fn (): array => (new FakePaymentGateway)->payment('pi_42'))->toThrow(UnscriptedFakeCall::class);
 });
+
+test('payment fake rejects malformed native facts before returning them', function (): void {
+    $fake = (new FakePaymentGateway)->willReturn('payment', ['paymentIntentId' => new stdClass]);
+
+    expect(fn (): array => $fake->payment('pi_42'))->toThrow(TypeError::class);
+});

@@ -14,7 +14,6 @@ use Nvl\Payments\Ownership\PaymentsProviderAdmission;
 use Stripe\Event;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\WebhookSignature;
-use UnexpectedValueException;
 
 /**
  * Authenticate raw Stripe deliveries before admitting an event to the local transition.
@@ -39,7 +38,7 @@ final class PaymentWebhooks
         }
         try {
             WebhookSignature::verifyHeader($payload, $signature, $secret, 300);
-        } catch (SignatureVerificationException|UnexpectedValueException) {
+        } catch (SignatureVerificationException) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Invalid Payments webhook.');
         }
         $decoded = json_decode($payload, true);

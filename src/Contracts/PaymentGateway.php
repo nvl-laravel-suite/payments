@@ -58,7 +58,6 @@ interface PaymentGateway
 
     /**
      * @return list<StripeRefundState>
-     * @return list<StripeRefundState>
      */
     public function refunds(string $paymentId): array;
 }

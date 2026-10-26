@@ -37,7 +37,7 @@ final class FakePaymentGateway implements PaymentGateway
     }
 
     /**
-     * * Return the next scripted Checkout session for the exact order and operation parameters.
+     * Return the next scripted Checkout session for the exact order and operation parameters.
      *
      * @return HostedCheckout
      */
@@ -52,11 +52,7 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::createCheckout requires scripted hosted checkout facts.');
-        }
-
-        return $result;
+        return $this->hostedCheckout($result);
     }
 
     /**
@@ -68,7 +64,7 @@ final class FakePaymentGateway implements PaymentGateway
     }
 
     /**
-     * * Return the next scripted Checkout state without retrieving a remote session.
+     * Return the next scripted Checkout state without retrieving a remote session.
      *
      * @return StripeCheckoutState
      */
@@ -76,15 +72,11 @@ final class FakePaymentGateway implements PaymentGateway
     {
         $result = $this->invoke('checkout', ['sessionId' => $sessionId]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::checkout requires scripted checkout facts.');
-        }
-
-        return $result;
+        return $this->checkoutState($result);
     }
 
     /**
-     * * Return the next scripted payment state for the supplied reference.
+     * Return the next scripted payment state for the supplied reference.
      *
      * @return StripePaymentState
      */
@@ -92,15 +84,11 @@ final class FakePaymentGateway implements PaymentGateway
     {
         $result = $this->invoke('payment', ['paymentReference' => $paymentReference]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::payment requires scripted payment facts.');
-        }
-
-        return $result;
+        return $this->paymentState($result);
     }
 
     /**
-     * * Return the next scripted existing-payment resolution without another gateway call.
+     * Return the next scripted existing-payment resolution without another gateway call.
      *
      * @return StripePaymentState
      */
@@ -108,15 +96,11 @@ final class FakePaymentGateway implements PaymentGateway
     {
         $result = $this->invoke('resolveExisting', ['reference' => $reference]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::resolveExisting requires scripted payment facts.');
-        }
-
-        return $result;
+        return $this->paymentState($result);
     }
 
     /**
-     * * Return the next scripted capture state for the exact minor amount and idempotency key.
+     * Return the next scripted capture state for the exact minor amount and idempotency key.
      *
      * @return StripePaymentState
      */
@@ -128,15 +112,11 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::capture requires scripted payment facts.');
-        }
-
-        return $result;
+        return $this->paymentState($result);
     }
 
     /**
-     * * Return the next scripted cancellation state without mutating authorization evidence.
+     * Return the next scripted cancellation state without mutating authorization evidence.
      *
      * @return StripePaymentState
      */
@@ -147,15 +127,11 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::cancel requires scripted payment facts.');
-        }
-
-        return $result;
+        return $this->paymentState($result);
     }
 
     /**
-     * * Return the next scripted refund state for the exact requested refund parameters.
+     * Return the next scripted refund state for the exact requested refund parameters.
      *
      * @return StripeRefundState
      */
@@ -168,17 +144,12 @@ final class FakePaymentGateway implements PaymentGateway
             'idempotencyKey' => $idempotencyKey,
         ]);
 
-        if (! is_array($result)) {
-            throw new TypeError('FakePaymentGateway::refund requires scripted refund facts.');
-        }
-
-        return $result;
+        return $this->refundState($result);
     }
 
     /**
      * Return the next scripted refund list without retrieving remote refunds.
      *
-     * @return list<StripeRefundState>
      * @return list<StripeRefundState>
      */
     public function refunds(string $paymentId): array
@@ -195,10 +166,103 @@ final class FakePaymentGateway implements PaymentGateway
                 throw new TypeError('FakePaymentGateway::refunds requires a scripted list of refund facts.');
             }
 
-            $refunds[] = $refund;
+            $refunds[] = $this->refundState($refund);
         }
 
         return $refunds;
+    }
+
+    /** @return HostedCheckout */
+    private function hostedCheckout(mixed $result): array
+    {
+        if (! is_array($result)
+            || ! is_string($result['sessionId'] ?? null)
+            || ! is_string($result['url'] ?? null)
+            || ! (($result['expiresAt'] ?? null) instanceof CarbonImmutable)) {
+            throw new TypeError('FakePaymentGateway requires complete, correctly typed HostedCheckout facts.');
+        }
+
+        return $result;
+    }
+
+    /** @return StripeCheckoutState */
+    private function checkoutState(mixed $result): array
+    {
+        if (! is_array($result)
+            || ! is_string($result['sessionId'] ?? null)
+            || ! array_key_exists('paymentIntentId', $result)
+            || ($result['paymentIntentId'] !== null && ! is_string($result['paymentIntentId']))
+            || ! is_string($result['accountId'] ?? null)
+            || ! is_bool($result['livemode'] ?? null)
+            || ! is_int($result['amountMinor'] ?? null)
+            || ! is_string($result['currency'] ?? null)
+            || ! is_string($result['status'] ?? null)
+            || ! is_string($result['paymentStatus'] ?? null)
+            || ! array_key_exists('orderReference', $result)
+            || ($result['orderReference'] !== null && ! is_string($result['orderReference']))
+            || ! array_key_exists('orderRevision', $result)
+            || ($result['orderRevision'] !== null && ! is_string($result['orderRevision']))
+            || ! (($result['expiresAt'] ?? null) instanceof CarbonImmutable)
+            || ! array_key_exists('operationKey', $result)
+            || ($result['operationKey'] !== null && ! is_string($result['operationKey']))
+            || ! array_key_exists('url', $result)
+            || ($result['url'] !== null && ! is_string($result['url']))) {
+            throw new TypeError('FakePaymentGateway requires complete, correctly typed StripeCheckoutState facts.');
+        }
+
+        return $result;
+    }
+
+    /** @return StripePaymentState */
+    private function paymentState(mixed $result): array
+    {
+        if (! is_array($result)
+            || ! array_key_exists('paymentIntentId', $result)
+            || ($result['paymentIntentId'] !== null && ! is_string($result['paymentIntentId']))
+            || ! array_key_exists('chargeId', $result)
+            || ($result['chargeId'] !== null && ! is_string($result['chargeId']))
+            || ! is_string($result['accountId'] ?? null)
+            || ! is_bool($result['livemode'] ?? null)
+            || ! is_int($result['amountMinor'] ?? null)
+            || ! is_int($result['capturedAmountMinor'] ?? null)
+            || ! is_int($result['refundedAmountMinor'] ?? null)
+            || ! is_string($result['currency'] ?? null)
+            || ! is_string($result['status'] ?? null)
+            || ! is_string($result['captureMethod'] ?? null)
+            || ! array_key_exists('amountCapturableMinor', $result)
+            || ($result['amountCapturableMinor'] !== null && ! is_int($result['amountCapturableMinor']))
+            || ! array_key_exists('paymentMethodType', $result)
+            || ($result['paymentMethodType'] !== null && ! is_string($result['paymentMethodType']))
+            || ! array_key_exists('partialAuthorizationStatus', $result)
+            || ($result['partialAuthorizationStatus'] !== null && ! is_string($result['partialAuthorizationStatus']))) {
+            throw new TypeError('FakePaymentGateway requires complete, correctly typed StripePaymentState facts.');
+        }
+
+        return $result;
+    }
+
+    /** @return StripeRefundState */
+    private function refundState(mixed $result): array
+    {
+        if (! is_array($result)
+            || ! is_string($result['refundId'] ?? null)
+            || ! array_key_exists('paymentIntentId', $result)
+            || ($result['paymentIntentId'] !== null && ! is_string($result['paymentIntentId']))
+            || ! array_key_exists('chargeId', $result)
+            || ($result['chargeId'] !== null && ! is_string($result['chargeId']))
+            || ! is_string($result['accountId'] ?? null)
+            || ! is_bool($result['livemode'] ?? null)
+            || ! is_int($result['amountMinor'] ?? null)
+            || ! is_string($result['currency'] ?? null)
+            || ! is_string($result['status'] ?? null)
+            || ! array_key_exists('reason', $result)
+            || ($result['reason'] !== null && ! is_string($result['reason']))
+            || ! array_key_exists('operationKey', $result)
+            || ($result['operationKey'] !== null && ! is_string($result['operationKey']))) {
+            throw new TypeError('FakePaymentGateway requires complete, correctly typed StripeRefundState facts.');
+        }
+
+        return $result;
     }
 
     /**
