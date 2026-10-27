@@ -9,8 +9,6 @@ use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
-use Nvl\Payments\Models\PaymentAttempt;
-use Nvl\Payments\Models\PaymentRefund;
 
 /**
  * Returns authorized order timelines using two configured-connection queries.
@@ -38,8 +36,8 @@ final class PaymentReadService
         if ($order->reference !== $orderReference) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');
         }
-        $attempts = PaymentAttempt::query()->where('order_reference', $orderReference)->orderBy('created_at')->orderBy('id')->get();
-        $refunds = PaymentRefund::query()->whereIn('payment_attempt_id', PaymentAttempt::query()->select('id')->where('order_reference', $orderReference))->orderBy('created_at')->orderBy('id')->get();
+        $attempts = PaymentsModelRegistry::attemptQuery()->where('order_reference', $orderReference)->orderBy('created_at')->orderBy('id')->get();
+        $refunds = PaymentsModelRegistry::refundQuery()->whereIn('payment_attempt_id', PaymentsModelRegistry::attemptQuery()->select('id')->where('order_reference', $orderReference))->orderBy('created_at')->orderBy('id')->get();
         $grouped = $refunds->groupBy('payment_attempt_id');
         $payments = [];
         foreach ($attempts as $attempt) {

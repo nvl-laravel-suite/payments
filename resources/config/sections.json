@@ -6,6 +6,8 @@
                 "connection",
                 "enabled",
                 "migrations.enabled",
+                "models.attempt",
+                "models.refund",
                 "ownership.scoped"
             ],
             "advanced": [

@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Config;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
-use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Ownership\PaymentsProviderAdmission;
 use Stripe\Event;
@@ -77,7 +76,7 @@ final class PaymentWebhooks
         $checkoutEvent = in_array($event->type, self::CHECKOUT_EVENTS, true);
         $supported = $checkoutEvent || in_array($event->type, self::PAYMENT_EVENTS, true);
         $field = $checkoutEvent ? 'stripe_checkout_session_id' : ($event->type === 'charge.refunded' ? 'stripe_charge_id' : 'stripe_payment_intent_id');
-        $attempt = $supported ? PaymentAttempt::where($field, $record->stripe_object_id)->first() : null;
+        $attempt = $supported ? PaymentsModelRegistry::attemptQuery()->where($field, $record->stripe_object_id)->first() : null;
         $checkout = $attempt !== null && $checkoutEvent && is_string($record->stripe_object_id) ? $this->gateway->checkout($record->stripe_object_id) : null;
         $reference = $checkout !== null ? $checkout['paymentIntentId'] : ($checkoutEvent ? null : $record->stripe_object_id);
         $payment = $attempt !== null && $reference !== null ? $this->gateway->payment($reference) : null;
@@ -87,7 +86,7 @@ final class PaymentWebhooks
                 return;
             }
             if ($attempt !== null) {
-                $locked = PaymentAttempt::whereKey($attempt->id)->lockForUpdate()->firstOrFail();
+                $locked = PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->lockForUpdate()->firstOrFail();
                 if ($checkout !== null && ($checkout['sessionId'] !== $locked->stripe_checkout_session_id || $checkout['orderReference'] !== $locked->order_reference
                     || $checkout['orderRevision'] !== $locked->order_revision || $checkout['amountMinor'] !== $locked->amount_minor
                     || strtolower($checkout['currency']) !== strtolower($locked->currency) || $checkout['accountId'] !== Config::get('nvl-payments.stripe.account_id')

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Payments\Services;
 
 use Illuminate\Contracts\Auth\Authenticatable;
-use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
@@ -45,7 +44,7 @@ final readonly class PaymentOrderOwnership
         if (! $this->native()) {
             return hash('sha256', $orderReference);
         }
-        $existing = PaymentAttempt::query()->where('order_reference', $orderReference)->whereNotNull('reservation_key')->first();
+        $existing = PaymentsModelRegistry::attemptQuery()->where('order_reference', $orderReference)->whereNotNull('reservation_key')->first();
 
         return $existing->reservation_key ?? hash('sha256', $this->boundary->key('payments.attempts', 'checkout:'.$orderReference));
     }

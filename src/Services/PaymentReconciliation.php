@@ -38,7 +38,7 @@ final class PaymentReconciliation
     public function resolveException(PaymentAttempt|string $attempt, string $operationId, Authenticatable $actor): PaymentAttempt
     {
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentAttempt::query()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'resolve_payment_exception', $order);
@@ -70,7 +70,7 @@ final class PaymentReconciliation
                 throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Only confirmed captured money can be accepted.');
             }
             $connection->transaction(function () use ($attempt, $payment, $actorId, $operationId, $connection): void {
-                $current = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
+                $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
                 if ($current->getRawOriginal() !== $attempt->getRawOriginal() || $current->state !== 'payment_exception') {
                     throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Payment exception changed; review its current facts before accepting.');
                 }
@@ -94,7 +94,7 @@ final class PaymentReconciliation
     {
         $this->integrity->assertReady();
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentAttempt::query()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $connection = $attempt->getConnection();
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
@@ -102,7 +102,7 @@ final class PaymentReconciliation
         if ($connection->transactionLevel() !== 0) {
             throw new DomainException('Reconciliation requires enabled Payments outside a transaction.');
         }
-        $observedRefunds = PaymentRefund::query()->where('payment_attempt_id', $attempt->id)->orderBy('id')->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
+        $observedRefunds = PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)->orderBy('id')->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
         $sessionId = $recoverySessionId ?? $attempt->stripe_checkout_session_id;
         $checkout = $sessionId === null ? null : $this->gateway->checkout($sessionId);
         if ($checkout !== null) {
@@ -118,11 +118,11 @@ final class PaymentReconciliation
         }
         $refunds = $payment === null || $payment['capturedAmountMinor'] === 0 ? [] : $this->gateway->refunds($reference);
         $connection->transaction(function () use ($attempt, $checkout, $payment, $refunds, $recoverySessionId, $observedRefunds): void {
-            $current = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
+            $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
             if ($current->getRawOriginal() !== $attempt->getRawOriginal()) {
                 throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Payment changed during reconciliation; retry with fresh Stripe facts.');
             }
-            $currentRefunds = PaymentRefund::query()->where('payment_attempt_id', $attempt->id)->orderBy('id')->lockForUpdate()->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
+            $currentRefunds = PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)->orderBy('id')->lockForUpdate()->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
             if ($currentRefunds !== $observedRefunds) {
                 throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Refunds changed during reconciliation; retry with fresh Stripe facts.');
             }
@@ -208,7 +208,7 @@ final class PaymentReconciliation
                 throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Duplicate Stripe refund identity.');
             }
             $seen[$remote['refundId']] = true;
-            $local = PaymentRefund::query()->where('stripe_refund_id', $remote['refundId'])->lockForUpdate()->first();
+            $local = PaymentsModelRegistry::refundQuery()->where('stripe_refund_id', $remote['refundId'])->lockForUpdate()->first();
             if ($local !== null && $local->payment_attempt_id !== $attempt->id) {
                 throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Refund belongs to another payment.');
             }
@@ -217,7 +217,7 @@ final class PaymentReconciliation
                 if ($correlated === null || $correlated->type !== 'refund' || $correlated->payment_attempt_id !== $attempt->id || $correlated->order_reference !== $attempt->order_reference) {
                     throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Refund operation metadata does not match its payment.');
                 }
-                $reserved = PaymentRefund::query()->where('payment_operation_id', $correlated->id)->lockForUpdate()->sole();
+                $reserved = PaymentsModelRegistry::refundQuery()->where('payment_operation_id', $correlated->id)->lockForUpdate()->sole();
                 if ($local !== null && $local->id !== $reserved->id) {
                     throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Refund identity is already assigned to another reservation.');
                 }

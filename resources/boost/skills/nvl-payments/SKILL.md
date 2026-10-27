@@ -35,3 +35,8 @@ The host owns its signed webhook endpoint and exception mapping. Schedule `nvl:p
 ## Test the boundary
 
 Install `Testing\FakePaymentGateway::fake($container)` before resolving services. Script documented native arrays using `willReturn` or `willThrow`; queues and call history are per instance, exhausted scripts fail and closures remain inert. Gateway fakes isolate provider requests. Real service integration tests must still prove authorization, persistence, reservations, rollback and recovery. No package HTTP, passive payload DTO or duplicate workflow interface is required.
+
+## Configured financial models
+
+Set `models.attempt` and `models.refund` to concrete package-model subclasses before boot. The frozen classes flow through native services, factories, refund relations, Ownership and restoration. Operations, webhooks and locks remain fixed.
+Retain required UUID identity, casts, query/persistence hooks and financial ownership declarations. Subclass-only table, connection or foreign-key changes are rejected; package-level storage configuration still applies to all records. Model configuration does not replace reviewed native adoption.

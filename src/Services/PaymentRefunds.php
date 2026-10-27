@@ -42,7 +42,7 @@ final class PaymentRefunds
     public function refund(PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Authenticatable $actor): PaymentRefund
     {
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentAttempt::query()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'refund', $order);
@@ -76,8 +76,8 @@ final class PaymentRefunds
         $refunds = $this->gateway->refunds($reference);
         $operation = $connection->transaction(function () use ($attempt, $operationId, $actorId, $fingerprint, $amountMinor, $reason, $note, $payment, $refunds): PaymentOperation {
             // Acquire SQLite's write lock before reading the balance; PostgreSQL locks this attempt row.
-            PaymentAttempt::query()->whereKey($attempt->id)->update(['id' => $attempt->id]);
-            $current = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
+            PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);
+            $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
             $operation = $this->journal->reserve('refund', $current->order_reference, $operationId, (string) $actorId, $fingerprint, $amountMinor);
             if (! $operation->wasRecentlyCreated) {
                 return $operation;
@@ -95,13 +95,13 @@ final class PaymentRefunds
         if (! $operation->wasRecentlyCreated) {
             return $this->replay($operation);
         }
-        $refund = PaymentRefund::query()->where('payment_operation_id', $operation->id)->sole();
+        $refund = PaymentsModelRegistry::refundQuery()->where('payment_operation_id', $operation->id)->sole();
         try {
             $result = $this->gateway->refund($reference, $amountMinor, $reason, $operation->idempotency_key);
             $this->balance->assertMatches($attempt, $result, $refund);
             $connection->transaction(function () use ($attempt, $refund, $result, $operation): void {
-                PaymentAttempt::query()->whereKey($attempt->id)->update(['id' => $attempt->id]);
-                $current = PaymentRefund::query()->lockForUpdate()->findOrFail($refund->id);
+                PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);
+                $current = PaymentsModelRegistry::refundQuery()->lockForUpdate()->findOrFail($refund->id);
                 $this->balance->assertMatches($attempt, $result, $current);
                 // A linked refund has already been observed by reconciliation after creation.
                 if ($current->stripe_refund_id === null) {
@@ -112,7 +112,7 @@ final class PaymentRefunds
         } catch (InvalidRequestException $exception) {
             if ($exception->getHttpStatus() === 400 && in_array($exception->getStripeCode(), ['charge_already_refunded', 'amount_too_large'], true)) {
                 $connection->transaction(function () use ($attempt, $refund, $operation): void {
-                    PaymentAttempt::query()->whereKey($attempt->id)->update(['id' => $attempt->id]);
+                    PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);
                     $refund->update(['status' => 'failed', 'last_synced_at' => now()]);
                     $operation->update(['status' => 'failed', 'resolved_at' => now()]);
                 }, 5);
@@ -138,6 +138,6 @@ final class PaymentRefunds
             throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Refund operation is unresolved; reconcile before retrying.');
         }
 
-        return PaymentRefund::query()->where('payment_operation_id', $operation->id)->sole();
+        return PaymentsModelRegistry::refundQuery()->where('payment_operation_id', $operation->id)->sole();
     }
 }

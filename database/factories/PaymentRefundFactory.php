@@ -6,9 +6,9 @@ namespace Nvl\Payments\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use InvalidArgumentException;
-use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 
 /**
  * Builds PaymentRefund fixture rows and their declared package parents.
@@ -23,6 +23,12 @@ final class PaymentRefundFactory extends Factory
     use PersistsPaymentOwnership;
 
     protected $model = PaymentRefund::class;
+
+    /** @return class-string<PaymentRefund> */
+    public function modelName(): string
+    {
+        return PaymentsModelRegistry::refundClass();
+    }
 
     /**
      * Prepare native parent and owner facts after Laravel expands relationships.
@@ -48,7 +54,7 @@ final class PaymentRefundFactory extends Factory
                 if ($parent->payment_attempt_id !== $model->payment_attempt_id) {
                     throw new InvalidArgumentException('Refund fixtures require the operation attempt.');
                 }
-                $attempt = PaymentAttempt::query()->findOrFail($model->payment_attempt_id);
+                $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($model->payment_attempt_id);
                 FactoryGuard::parent($attempt, $model);
                 if ($model->currency !== $attempt->currency || $model->amount_minor <= 0
                     || $model->amount_minor > $attempt->captured_amount_minor - $attempt->refunded_amount_minor) {
@@ -81,7 +87,7 @@ final class PaymentRefundFactory extends Factory
      */
     public function forOperation(PaymentOperation $parent): static
     {
-        FactoryGuard::parent($parent, new PaymentRefund);
+        FactoryGuard::parent($parent, PaymentsModelRegistry::newRefund());
 
         return $this->state([
             'payment_operation_id' => $parent->getKey(),

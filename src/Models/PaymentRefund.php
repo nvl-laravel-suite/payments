@@ -13,6 +13,7 @@ use Nvl\Payments\Database\Factories\PaymentRefundFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\Concerns\HasPaymentOwnership;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 
@@ -36,9 +37,11 @@ use Nvl\Support\Ownership\Contracts\Ownable;
  *
  * @api
  *
+ * @nvl-consumer-host-subclasses
+ *
  * @nvl-consumer-read id
  */
-final class PaymentRefund extends Model implements Ownable
+class PaymentRefund extends Model implements Ownable
 {
     /** @use HasFactory<PaymentRefundFactory> */
     use HasFactory;
@@ -68,7 +71,13 @@ final class PaymentRefund extends Model implements Ownable
      */
     public function paymentAttempt(): BelongsTo
     {
-        return $this->belongsTo(PaymentAttempt::class, 'payment_attempt_id');
+        return $this->belongsTo(PaymentsModelRegistry::attemptClass(), 'payment_attempt_id');
+    }
+
+    /** Preserve native relation keys when a deployment selects a subclass. */
+    public function getForeignKey(): string
+    {
+        return 'payment_refund_id';
     }
 
     /** Resolve the configured package storage table. */

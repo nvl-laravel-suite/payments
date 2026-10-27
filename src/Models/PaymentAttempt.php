@@ -45,9 +45,11 @@ use Nvl\Support\Ownership\Contracts\Ownable;
  *
  * @api
  *
+ * @nvl-consumer-host-subclasses
+ *
  * @nvl-consumer-read id
  */
-final class PaymentAttempt extends Model implements Ownable
+class PaymentAttempt extends Model implements Ownable
 {
     /** @use HasFactory<PaymentAttemptFactory> */
     use HasFactory;
@@ -80,6 +82,12 @@ final class PaymentAttempt extends Model implements Ownable
             'last_synced_at' => 'datetime',
             'last_reconcile_attempt_at' => 'datetime',
         ];
+    }
+
+    /** Preserve native relation keys when a deployment selects a subclass. */
+    public function getForeignKey(): string
+    {
+        return 'payment_attempt_id';
     }
 
     /** Resolve the configured package storage table. */

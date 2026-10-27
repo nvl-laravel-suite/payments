@@ -63,7 +63,8 @@
             "kind": "class",
             "file": "database/factories/PaymentAttemptFactory.php",
             "methods": [
-                "definition"
+                "definition",
+                "modelName"
             ],
             "properties": [],
             "constants": []
@@ -83,7 +84,8 @@
             "file": "database/factories/PaymentRefundFactory.php",
             "methods": [
                 "definition",
-                "forOperation"
+                "forOperation",
+                "modelName"
             ],
             "properties": [],
             "constants": []
@@ -166,6 +168,7 @@
                 "delete",
                 "fresh",
                 "getConnectionName",
+                "getForeignKey",
                 "getTable",
                 "newQueryForRestoration",
                 "ownershipDefinition",
@@ -245,6 +248,7 @@
                 "delete",
                 "fresh",
                 "getConnectionName",
+                "getForeignKey",
                 "getTable",
                 "newQueryForRestoration",
                 "ownershipDefinition",
@@ -366,6 +370,18 @@
             "methods": [
                 "__construct",
                 "process"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Services\\PaymentsModelRegistry": {
+            "kind": "class",
+            "file": "src/Services/PaymentsModelRegistry.php",
+            "methods": [
+                "__construct",
+                "attemptModel",
+                "prepare",
+                "refundModel"
             ],
             "properties": [],
             "constants": []

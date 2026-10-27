@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Route;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
-use Nvl\Payments\Models\PaymentAttempt;
 use PDOException;
 
 /**
@@ -49,7 +48,7 @@ final class PaymentsDoctor
             'webhook_route' => Route::has('nvl.payments.webhook'),
         ];
         try {
-            $schema = (new PaymentAttempt)->getConnection()->getSchemaBuilder();
+            $schema = (PaymentsModelRegistry::newAttempt())->getConnection()->getSchemaBuilder();
             foreach ([PaymentsTables::get(PaymentsTables::Attempts), PaymentsTables::get(PaymentsTables::Operations), PaymentsTables::get(PaymentsTables::Refunds), PaymentsTables::get(PaymentsTables::WebhookEvents)] as $table) {
                 $checks['schema_'.$table] = $schema->hasTable($table);
             }

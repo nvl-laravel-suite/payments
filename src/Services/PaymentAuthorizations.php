@@ -51,7 +51,7 @@ final class PaymentAuthorizations
     /** Reserve one final authorization operation before making remote calls outside transactions. */
     private function execute(string $kind, string $attemptId, Authenticatable $actor, ?int $amountMinor, string $operationId): PaymentAttempt
     {
-        $attempt = PaymentAttempt::query()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, $kind, $order);
@@ -75,7 +75,7 @@ final class PaymentAuthorizations
             throw new DomainException('Authorization operations must start outside a database transaction.');
         }
         $operation = $connection->transaction(function () use ($attempt, $kind, $operationId, $actorId, $amountMinor): PaymentOperation {
-            $current = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
+            $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
             $operation = $this->journal->reserve($kind, $current->order_reference, $operationId, (string) $actorId, $current->id, $amountMinor);
             if (! $operation->wasRecentlyCreated) {
                 if ($operation->status !== 'completed') {

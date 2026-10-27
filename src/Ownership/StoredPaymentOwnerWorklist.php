@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Payments\Ownership;
 
 use Nvl\Payments\Contracts\PaymentOwnerWorklist;
-use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Support\Ownership\Enums\OwnershipContextMode;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipContextResolver;
@@ -30,7 +30,7 @@ final readonly class StoredPaymentOwnerWorklist implements PaymentOwnerWorklist
             throw new OwnershipViolation;
         }
         $this->integrity->assertReady();
-        $model = new PaymentAttempt;
+        $model = PaymentsModelRegistry::newAttempt();
         $query = $model->getConnection()->table($model->getTable())->useWritePdo()->select(['id', 'owner_scope_key', 'owner_reference']);
         if ($attemptId !== null) {
             $query->where('id', $attemptId);

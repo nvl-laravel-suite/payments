@@ -21,6 +21,7 @@ use Nvl\Payments\Services\DenyExistingPaymentOwnership;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\DenyPaymentOrderProvider;
 use Nvl\Payments\Services\PaymentsDoctor;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Payments\Services\StripePaymentGateway;
 use Nvl\Support\Bindings\RequiredBindingDefinition;
 use Nvl\Support\Bindings\RequiredBindings;
@@ -59,6 +60,8 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
             }
         });
         $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-payments.php', 'payments');
+        $this->app->singleton(PaymentsModelRegistry::class);
+        $this->app->booting(fn () => $this->app->make(PaymentsModelRegistry::class)->prepare());
         $this->app->bindIf(PaymentGateway::class, fn (): StripePaymentGateway => new StripePaymentGateway(
             new StripeClient(Config::string('nvl-payments.stripe.secret')),
             Config::string('nvl-payments.stripe.account_id'),

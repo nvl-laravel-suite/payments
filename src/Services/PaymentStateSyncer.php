@@ -66,9 +66,9 @@ final class PaymentStateSyncer
         if ($payment['paymentIntentId'] === null && $payment['chargeId'] === null) {
             return;
         }
-        $connection = (new PaymentAttempt)->getConnection();
+        $connection = (PaymentsModelRegistry::newAttempt())->getConnection();
         $connection->transaction(function () use ($payment, $connection, $allowRefundDecrease): void {
-            $query = PaymentAttempt::query();
+            $query = PaymentsModelRegistry::attemptQuery();
             if ($payment['paymentIntentId'] !== null) {
                 $query->where('stripe_payment_intent_id', $payment['paymentIntentId']);
             } else {

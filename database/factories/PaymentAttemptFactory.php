@@ -6,6 +6,7 @@ namespace Nvl\Payments\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 
 /**
  * Builds PaymentAttempt fixture rows and their declared package parents.
@@ -17,6 +18,12 @@ use Nvl\Payments\Models\PaymentAttempt;
 final class PaymentAttemptFactory extends Factory
 {
     protected $model = PaymentAttempt::class;
+
+    /** @return class-string<PaymentAttempt> */
+    public function modelName(): string
+    {
+        return PaymentsModelRegistry::attemptClass();
+    }
 
     /**
      * Define the fixture's persisted attributes.

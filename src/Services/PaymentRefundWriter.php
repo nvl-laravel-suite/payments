@@ -22,8 +22,8 @@ final readonly class PaymentRefundWriter
      */
     public function create(array $attributes): PaymentRefund
     {
-        return $this->writer->create(PaymentRefund::class, static function (array $ownership) use ($attributes): PaymentRefund {
-            $refund = new PaymentRefund;
+        return $this->writer->create(PaymentsModelRegistry::refundClass(), static function (array $ownership) use ($attributes): PaymentRefund {
+            $refund = PaymentsModelRegistry::newRefund();
             $refund->forceFill([...$attributes, ...$ownership])->save();
 
             return $refund;

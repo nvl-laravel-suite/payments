@@ -56,7 +56,7 @@ final class PaymentCheckout
         $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'start_checkout', $order);
         $this->validate($order, $successUrl, $cancelUrl);
-        $connection = (new PaymentAttempt)->getConnection();
+        $connection = (PaymentsModelRegistry::newAttempt())->getConnection();
         if ($connection->transactionLevel() !== 0) {
             throw new DomainException('Checkout must start outside an existing database transaction.');
         }
@@ -68,14 +68,14 @@ final class PaymentCheckout
 
         for ($iteration = 0; $iteration < 3; $iteration++) {
             $attempt = $connection->transaction(function () use ($order, $actorId, $successUrl, $cancelUrl): PaymentAttempt {
-                $attempt = PaymentAttempt::query()->createOrFirst(['reservation_key' => $this->scope->reservationKey($order->reference)], [
+                $attempt = PaymentsModelRegistry::attemptQuery()->createOrFirst(['reservation_key' => $this->scope->reservationKey($order->reference)], [
                     'order_reference' => $order->reference, 'order_revision' => $order->revision,
                     'amount_minor' => $order->amountMinor, 'currency' => strtoupper($order->currency),
                     'origin' => 'checkout', 'state' => 'reserved',
                     'capture_method' => config('nvl-payments.checkout.capture_method', 'automatic'),
                     'expires_at' => CarbonImmutable::now()->addMinutes(config()->integer('nvl-payments.checkout.expires_in_minutes')),
                 ]);
-                if (PaymentAttempt::query()->where('order_reference', $order->reference)->whereKeyNot($attempt->id)->whereIn('state', ['processing', 'authorized', 'captured', 'partially_refunded', 'refunded', 'payment_exception'])->exists()) {
+                if (PaymentsModelRegistry::attemptQuery()->where('order_reference', $order->reference)->whereKeyNot($attempt->id)->whereIn('state', ['processing', 'authorized', 'captured', 'partially_refunded', 'refunded', 'payment_exception'])->exists()) {
                     throw PaymentsException::because(PaymentsResponseCode::CheckoutConflict, 'An existing payment blocks another checkout.');
                 }
                 if ($attempt->wasRecentlyCreated) {
@@ -101,7 +101,7 @@ final class PaymentCheckout
     public function recover(PaymentAttempt|string $attempt, string $stripeSessionId, Authenticatable $actor): PaymentAttempt
     {
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentAttempt::query()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $this->scope->assertOrder($order, $actor);
         $this->access->assertCanManage($actor, 'recover_checkout', $order);
@@ -137,7 +137,7 @@ final class PaymentCheckout
             || preg_match('/^(pi|ch|txn)_[A-Za-z0-9]+$/D', $stripeReference) !== 1) {
             throw new InvalidArgumentException('A stable actor and supported Stripe reference are required.');
         }
-        $connection = (new PaymentAttempt)->getConnection();
+        $connection = (PaymentsModelRegistry::newAttempt())->getConnection();
         if ($connection->transactionLevel() !== 0) {
             throw new DomainException('Payment attachment must start outside a database transaction.');
         }
@@ -150,12 +150,12 @@ final class PaymentCheckout
                 throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Attachment is unresolved; reconcile before retrying.');
             }
 
-            return PaymentAttempt::query()->findOrFail($operation->payment_attempt_id);
+            return PaymentsModelRegistry::attemptQuery()->findOrFail($operation->payment_attempt_id);
         }
         try {
             $payment = $this->gateway->resolveExisting($stripeReference);
             $this->assertIdentity($stripeReference, $payment);
-            $attempt = new PaymentAttempt([
+            $attempt = PaymentsModelRegistry::newAttempt([
                 'order_reference' => $order->reference, 'order_revision' => $order->revision,
                 'amount_minor' => $order->amountMinor, 'currency' => strtoupper($order->currency),
                 'origin' => 'attached', 'state' => 'reserved',
@@ -168,7 +168,7 @@ final class PaymentCheckout
                 if ($current->status !== 'reserved') {
                     throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Attachment operation changed while resolving Stripe.');
                 }
-                $duplicate = PaymentAttempt::query()->where(function ($query) use ($payment): void {
+                $duplicate = PaymentsModelRegistry::attemptQuery()->where(function ($query) use ($payment): void {
                     if ($payment['paymentIntentId'] !== null) {
                         $query->orWhere('stripe_payment_intent_id', $payment['paymentIntentId']);
                     }
@@ -242,7 +242,7 @@ final class PaymentCheckout
         try {
             $checkout = $this->gateway->createCheckout($order, $attempt->capture_method ?? 'automatic', $successUrl, $cancelUrl, CarbonImmutable::instance($attempt->expires_at ?? throw new DomainException('Missing checkout expiry.')), $operation->idempotency_key);
             $attempt->getConnection()->transaction(function () use ($attempt, $operation, $checkout): void {
-                PaymentAttempt::query()->whereKey($attempt->id)->where('state', 'reserved')->update([
+                PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'reserved')->update([
                     'state' => 'open', 'stripe_checkout_session_id' => $checkout['sessionId'],
                     'checkout_url' => $checkout['url'], 'expires_at' => $checkout['expiresAt'],
                 ]);
@@ -264,7 +264,7 @@ final class PaymentCheckout
     private function reuseOrExpire(PaymentAttempt $attempt, OrderPaymentSnapshot $order, string $actorId): ?array
     {
         $recoveringFailure = $attempt->state === 'failed';
-        if (! in_array($attempt->state, ['open', 'failed'], true) || $attempt->stripe_checkout_session_id === null || PaymentAttempt::query()->whereKey($attempt->id)->where('state', $attempt->state)->update(['state' => 'checking']) !== 1) {
+        if (! in_array($attempt->state, ['open', 'failed'], true) || $attempt->stripe_checkout_session_id === null || PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', $attempt->state)->update(['state' => 'checking']) !== 1) {
             throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Checkout is unresolved or already paying; reconcile before retrying.');
         }
         $attempt->refresh();
@@ -274,11 +274,11 @@ final class PaymentCheckout
             $this->verifySession($attempt, $remote);
             $changed = $attempt->order_revision !== $order->revision || $attempt->amount_minor !== $order->amountMinor || $attempt->currency !== strtoupper($order->currency);
             if ($remote['paymentStatus'] !== 'unpaid' || ($remote['status'] === 'complete' && ! $recoveringFailure)) {
-                PaymentAttempt::query()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => $changed ? 'payment_exception' : 'processing']);
+                PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => $changed ? 'payment_exception' : 'processing']);
                 throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'The existing Session may have received payment.');
             }
             if ($remote['status'] === 'open' && ! $changed && ! $recoveringFailure && $remote['expiresAt']->isFuture()) {
-                if (PaymentAttempt::query()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => 'open']) !== 1) {
+                if (PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => 'open']) !== 1) {
                     throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Payment state changed while checking its Session.');
                 }
 
@@ -286,7 +286,7 @@ final class PaymentCheckout
             }
             if ($remote['status'] === 'open') {
                 $operation = $attempt->getConnection()->transaction(function () use ($attempt, $actorId): PaymentOperation {
-                    if (PaymentAttempt::query()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => 'expiring']) !== 1) {
+                    if (PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => 'expiring']) !== 1) {
                         throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Payment state changed before Session expiry.');
                     }
                     $attempt->refresh();
@@ -305,17 +305,17 @@ final class PaymentCheckout
             }
             if ((! ($recoveringFailure && $remote['status'] === 'complete') && $remote['status'] !== 'expired') || $remote['paymentStatus'] !== 'unpaid') {
                 if ($remote['paymentStatus'] !== 'unpaid' || $remote['status'] === 'complete') {
-                    PaymentAttempt::query()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => $changed ? 'payment_exception' : 'processing']);
+                    PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => $changed ? 'payment_exception' : 'processing']);
                 }
                 throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Session expiry was not confirmed.');
             }
             $this->assertCannotCollect($attempt, $remote);
             $attempt->getConnection()->transaction(function () use ($attempt, $operation, $remote): void {
-                $current = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
+                $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
                 if ($current->getRawOriginal() !== $attempt->getRawOriginal()) {
                     throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Payment changed during recovery; reconcile before retrying.');
                 }
-                if (PaymentAttempt::query()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => 'expired', 'reservation_key' => null, 'last_synced_at' => now()]) !== 1) {
+                if (PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => 'expired', 'reservation_key' => null, 'last_synced_at' => now()]) !== 1) {
                     throw PaymentsException::because(PaymentsResponseCode::OperationConflict, 'Payment state changed before reservation release.');
                 }
                 if ($operation !== null) {
@@ -328,7 +328,7 @@ final class PaymentCheckout
             if ($operation !== null) {
                 $this->journal->markUnknown($operation);
             }
-            PaymentAttempt::query()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => 'unknown']);
+            PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => 'unknown']);
             throw $exception;
         }
     }

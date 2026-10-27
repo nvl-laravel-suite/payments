@@ -7,8 +7,8 @@ namespace Nvl\Payments\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentOwnerWorklist;
-use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Services\PaymentReconciliation;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipSystemRunner;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Throwable;
@@ -64,7 +64,7 @@ final class PaymentsReconcileCommand extends Command
      */
     private function reconcileWithinScope(PaymentReconciliation $reconcile, ?string $target, int $batch, int $maximum): array
     {
-        $query = PaymentAttempt::query();
+        $query = PaymentsModelRegistry::attemptQuery();
         if ($target !== null) {
             $query->whereKey($target);
         }
@@ -80,7 +80,7 @@ final class PaymentsReconcileCommand extends Command
             foreach ($ids as $id) {
                 $visited[] = $id;
                 try {
-                    PaymentAttempt::query()->whereKey($id)->update(['last_reconcile_attempt_at' => now()]);
+                    PaymentsModelRegistry::attemptQuery()->whereKey($id)->update(['last_reconcile_attempt_at' => now()]);
                     $reconcile->reconcile($id);
                     $processed++;
                 } catch (Throwable) {

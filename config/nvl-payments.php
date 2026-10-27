@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Support\Config\PackageEnvironment;
 
 /** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
+    'models' => ['attempt' => PaymentAttempt::class, 'refund' => PaymentRefund::class],
     'ownership' => ['scoped' => true],
     'enabled' => false,
     'connection' => null,

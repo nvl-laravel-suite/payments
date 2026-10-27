@@ -89,3 +89,9 @@ Run `nvl:payments:doctor --strict`, schedule `nvl:payments:reconcile`, and exerc
 `Nvl\Payments\Testing\FakePaymentGateway::fake($container)` installs a fresh gateway before constructing services. Script each method with `willReturn` or `willThrow`; return documented fact arrays and lists of refund fact arrays, and use `null` for checkout expiration. Scripts are per-instance FIFO; closures remain inert, exhausted scripts fail and calls retain exact named arguments.
 
 Gateway fakes avoid provider requests; actual service calls still exercise payment persistence, ownership and journals. Consumer Actions and HTTP fixtures belong in the host. The package does not ship application workflow interfaces, payload DTOs or routes.
+
+## Configured root models
+
+Set `nvl-payments.models.attempt` and `nvl-payments.models.refund` before Laravel boots to concrete subclasses of `PaymentAttempt` and `PaymentRefund`. Native services, factories, refund parent relations, restoration and Ownership declarations resolve the frozen configured classes. Operation journals, webhook receipts and lock records retain their package classes.
+
+Extensions retain native UUID keys, required casts, query and persistence hooks, foreign keys, and the package's financial ownership strategy. Root and technical records must use the same actual package connection and their configured native tables; selecting a separate connection or table only on a subclass is rejected before effects. Configure package-level `connection` and `tables` options instead. Model replacement does not adopt existing storage or alter the native schema contract.

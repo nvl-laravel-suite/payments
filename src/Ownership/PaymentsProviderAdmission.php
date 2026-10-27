@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Payments\Ownership;
 
 use Closure;
-use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipSystemRunner;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
@@ -47,7 +47,7 @@ final readonly class PaymentsProviderAdmission
         if ($field === null) {
             return;
         }
-        $model = new PaymentAttempt;
+        $model = PaymentsModelRegistry::newAttempt();
         $rows = $model->getConnection()->table($model->getTable())->useWritePdo()->where($field, $object)->limit(2)->get(['owner_scope_key', 'owner_reference']);
         if ($rows->isEmpty()) {
             return;

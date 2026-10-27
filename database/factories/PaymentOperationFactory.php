@@ -7,6 +7,7 @@ namespace Nvl\Payments\Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 
 /**
  * Builds PaymentOperation fixture rows and their declared package parents.
@@ -38,7 +39,7 @@ final class PaymentOperationFactory extends Factory
             }
 
             if ($model->getAttribute('payment_attempt_id') !== null) {
-                $parent = PaymentAttempt::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('payment_attempt_id')));
+                $parent = PaymentsModelRegistry::attemptQuery()->findOrFail(FactoryGuard::identifier($model->getAttribute('payment_attempt_id')));
                 FactoryGuard::parent($parent, $model);
             }
         });
@@ -53,7 +54,7 @@ final class PaymentOperationFactory extends Factory
     {
         return [
             'payment_attempt_id' => PaymentAttempt::factory()->state(['state' => 'paid', 'captured_amount_minor' => 1000]),
-            'order_reference' => fn (array $attributes): string => $attributes['payment_attempt_id'] === null ? 'fixture' : PaymentAttempt::query()->findOrFail(FactoryGuard::identifier($attributes['payment_attempt_id']))->order_reference,
+            'order_reference' => fn (array $attributes): string => $attributes['payment_attempt_id'] === null ? 'fixture' : PaymentsModelRegistry::attemptQuery()->findOrFail(FactoryGuard::identifier($attributes['payment_attempt_id']))->order_reference,
             'type' => 'refund',
             'idempotency_key' => $this->faker->unique()->uuid(),
             'input_fingerprint' => hash('sha256', $this->faker->uuid()),

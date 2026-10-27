@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Ownership;
 
-use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
-use Nvl\Payments\Models\PaymentRefund;
+use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipReadiness;
 use Nvl\Support\Ownership\Services\OwnershipConstraintInspector;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
@@ -53,11 +52,11 @@ final readonly class PaymentsIntegrityGuard
             $model = new ($this->resources->get($key)->model);
             $this->constraints->assertPresent($model->getConnection(), $model->getTable(), 'update', 'assigned:'.hash('sha256', json_encode($fields, JSON_THROW_ON_ERROR)));
         }
-        $attempt = new PaymentAttempt;
+        $attempt = PaymentsModelRegistry::newAttempt();
         $purpose = 'assigned:'.hash('sha256', json_encode(['stripe_charge_id'], JSON_THROW_ON_ERROR)).':'.hash('sha256', json_encode(['state', self::SettledChargeStates], JSON_THROW_ON_ERROR));
         $this->constraints->assertPresent($attempt->getConnection(), $attempt->getTable(), 'update', $purpose);
         $operation = new PaymentOperation;
-        $refund = new PaymentRefund;
+        $refund = PaymentsModelRegistry::newRefund();
         foreach ([[$operation, 'payment_attempt_id', $attempt], [$refund, 'payment_operation_id', $operation]] as [$child, $foreign, $parent]) {
             foreach (['insert', 'update'] as $event) {
                 $this->constraints->assertPresent($child->getConnection(), $child->getTable(), $event, 'reference:'.$foreign.':'.$parent->getTable().':id');
