@@ -91,11 +91,11 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
 
         $this->publishes([
             __DIR__.'/../../config/nvl-payments.php' => config_path('nvl-payments.php'),
-        ], 'payments-config');
-        $this->publishesMigrations([$path => database_path('migrations')], 'payments-migrations');
+        ], 'nvl-payments-config');
+        $this->publishesMigrations([$path => database_path('migrations')], 'nvl-payments-migrations');
         $this->publishes([
             __DIR__.'/../../resources/boost/skills/nvl-payments' => base_path('.agents/skills/nvl-payments'),
-        ], 'payments-skills');
+        ], 'nvl-payments-skills');
 
         if (config('nvl-payments.migrations.enabled') === true) {
             $this->loadMigrationsFrom($path);

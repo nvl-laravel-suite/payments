@@ -95,3 +95,5 @@ Gateway fakes avoid provider requests; actual service calls still exercise payme
 Set `nvl-payments.models.attempt` and `nvl-payments.models.refund` before Laravel boots to concrete subclasses of `PaymentAttempt` and `PaymentRefund`. Native services, factories, refund parent relations, restoration and Ownership declarations resolve the frozen configured classes. Operation journals, webhook receipts and lock records retain their package classes.
 
 Extensions retain native UUID keys, required casts, query and persistence hooks, foreign keys, and the package's financial ownership strategy. Root and technical records must use the same actual package connection and their configured native tables; selecting a separate connection or table only on a subclass is rejected before effects. Configure package-level `connection` and `tables` options instead. Model replacement does not adopt existing storage or alter the native schema contract.
+
+Shared [service contracts, model extensions and composition](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/consumer-api.md) apply alongside the package-specific rules above.

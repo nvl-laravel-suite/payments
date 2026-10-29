@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
-use Nvl\Support\Config\PackageEnvironment;
 
 /** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
@@ -15,9 +14,9 @@ return [
     // Choose vendor migrations or publish them into the host; never enable both modes.
     'migrations' => ['enabled' => false],
     'stripe' => [
-        'secret' => PackageEnvironment::get('NVL_PAYMENTS_STRIPE_SECRET'),
-        'webhook_secret' => PackageEnvironment::get('NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET'),
-        'account_id' => PackageEnvironment::get('NVL_PAYMENTS_STRIPE_ACCOUNT_ID'),
+        'secret' => env('NVL_PAYMENTS_STRIPE_SECRET'),
+        'webhook_secret' => env('NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET'),
+        'account_id' => env('NVL_PAYMENTS_STRIPE_ACCOUNT_ID'),
         'livemode' => false,
     ],
     'allowed_currencies' => [],
