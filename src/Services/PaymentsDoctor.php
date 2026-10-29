@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Payments\Services;
 
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\Route;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
@@ -45,7 +44,6 @@ final class PaymentsDoctor
             'capture_method' => in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'manual'], true),
             'order_provider' => ! $orders instanceof DenyPaymentOrderProvider,
             'management_access' => ! $access instanceof DenyPaymentManagementAccess,
-            'webhook_route' => Route::has('nvl.payments.webhook'),
         ];
         try {
             $schema = (PaymentsModelRegistry::newAttempt())->getConnection()->getSchemaBuilder();

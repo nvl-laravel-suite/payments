@@ -53,7 +53,7 @@ final class PaymentCheckout
     public function start(string $orderReference, Authenticatable $actor, string $successUrl, string $cancelUrl): array
     {
         $order = $this->orders->resolve($orderReference);
-        $this->scope->assertOrder($order, $actor);
+        $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'start_checkout', $order);
         $this->validate($order, $successUrl, $cancelUrl);
         $connection = (PaymentsModelRegistry::newAttempt())->getConnection();
@@ -103,7 +103,7 @@ final class PaymentCheckout
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
         $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
-        $this->scope->assertOrder($order, $actor);
+        $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'recover_checkout', $order);
         if ($order->reference !== $attempt->order_reference) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Invalid Checkout recovery order identity.');
@@ -121,7 +121,7 @@ final class PaymentCheckout
     public function attach(string $orderReference, string $stripeReference, string $operationId, Authenticatable $actor): PaymentAttempt
     {
         $order = $this->orders->resolve($orderReference);
-        $this->scope->assertOrder($order, $actor);
+        $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'attach_existing', $order);
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');

@@ -44,7 +44,7 @@ final class PaymentRefunds
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
         $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
-        $this->scope->assertOrder($order, $actor);
+        $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'refund', $order);
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');

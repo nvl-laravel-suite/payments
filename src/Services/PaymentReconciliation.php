@@ -40,7 +40,7 @@ final class PaymentReconciliation
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
         $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
-        $this->scope->assertOrder($order, $actor);
+        $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'resolve_payment_exception', $order);
         $connection = $attempt->getConnection();
         if (! config()->boolean('nvl-payments.enabled')) {

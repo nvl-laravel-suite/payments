@@ -10,6 +10,7 @@ use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Services\PaymentStateSyncer;
+use Nvl\Payments\Services\PaymentWebhooks;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
@@ -45,6 +46,24 @@ beforeEach(function (): void {
     config(['nvl-payments.stripe.webhook_secret' => 'whsec_payments', 'nvl-payments.stripe.account_id' => 'acct_one']);
     $this->gateway = Mockery::mock(PaymentGateway::class);
     app()->instance(PaymentGateway::class, $this->gateway);
+});
+
+it('rejects webhook provider reads inside an ambient transaction before creating receipts', function (): void {
+    webhookAttempt();
+    $payload = webhookPayload();
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$payload, 'whsec_payments');
+    $this->gateway->shouldReceive('payment')->andReturn(webhookPayment());
+    $connection = (new PaymentAttempt)->getConnection();
+    $connection->beginTransaction();
+    try {
+        expect(fn () => app(PaymentWebhooks::class)->process($payload, "t={$timestamp},v1={$signature}"))
+            ->toThrow(DomainException::class, 'outside a database transaction');
+        expect(PaymentWebhookEvent::query()->count())->toBe(0);
+        $this->gateway->shouldNotHaveReceived('payment');
+    } finally {
+        $connection->rollBack();
+    }
 });
 
 it('rejects missing invalid stale and malformed signatures or bodies', function (): void {

@@ -7,6 +7,7 @@ namespace Nvl\Payments\Services;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
+use Nvl\Support\Auth\CanonicalActorResolver;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipContextResolver;
@@ -21,13 +22,14 @@ final readonly class PaymentOrderOwnership
 {
     /** Retain neutral runtime capabilities, never a cached owner or host order. */
     public function __construct(private OwnershipResourceRegistry $resources, private OwnershipContextResolver $context,
-        private OwnershipBoundary $boundary, private PaymentsIntegrityGuard $integrity) {}
+        private OwnershipBoundary $boundary, private PaymentsIntegrityGuard $integrity, private CanonicalActorResolver $actors) {}
 
     /** Reject foreign or omitted native order ownership before host callbacks and provider effects. */
-    public function assertOrder(OrderPaymentSnapshot $order, Authenticatable $actor): void
+    public function resolveActor(OrderPaymentSnapshot $order, Authenticatable $actor): Authenticatable
     {
+        $actor = $this->actors->resolve($actor);
         if (! $this->native()) {
-            return;
+            return $actor;
         }
         $snapshot = $this->context->current()->snapshot();
         $id = $actor->getAuthIdentifier();
@@ -36,6 +38,8 @@ final readonly class PaymentOrderOwnership
             throw new OwnershipViolation('The host order and actor must match the admitted native producer.');
         }
         $this->integrity->assertReady();
+
+        return $actor;
     }
 
     /** Preserve an existing legacy reservation; partition only newly created native reservations. */

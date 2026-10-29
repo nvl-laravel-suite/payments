@@ -31,7 +31,7 @@ final class PaymentReadService
     public function forOrder(string $orderReference, Authenticatable $actor): array
     {
         $order = $this->orders->resolve($orderReference);
-        $this->scope->assertOrder($order, $actor);
+        $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'view', $order);
         if ($order->reference !== $orderReference) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');

@@ -2,13 +2,19 @@
 
 declare(strict_types=1);
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
+use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Exceptions\BindingRequiredException;
 
 require_once __DIR__.'/../ReconciliationTestCase.php';
@@ -16,6 +22,33 @@ uses(PaymentsSchemaTestCase::class);
 
 beforeEach(function (): void {
     setupRefundHost();
+});
+
+it('uses persisted Eloquent actor permissions for native payment reads', function (): void {
+    Schema::create('payments_test_actors', function (Blueprint $table): void {
+        $table->id();
+        $table->boolean('may_manage');
+    });
+    $actor = new class extends User
+    {
+        protected $table = 'payments_test_actors';
+
+        protected $guarded = [];
+
+        public $timestamps = false;
+    };
+    $actor->fill(['may_manage' => false])->save();
+    $actor->setAttribute('may_manage', true);
+    app()->instance(PaymentManagementAccess::class, new class implements PaymentManagementAccess
+    {
+        public function assertCanManage(Authenticatable $actor, string $operation, OrderPaymentSnapshot $order): void
+        {
+            if (! $actor instanceof User || ! $actor->getAttribute('may_manage')) {
+                throw new AuthorizationException;
+            }
+        }
+    });
+    expect(fn () => app(PaymentReadService::class)->forOrder('order-1', $actor))->toThrow(AuthorizationException::class);
 });
 
 it('denies reading by default', function (): void {

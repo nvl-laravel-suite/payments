@@ -18,7 +18,7 @@ Bind these host integration contracts before resolving payment services:
 - `PaymentManagementAccess::assertCanManage($actor, $operation, $order)` enforces host permissions. Operation names are `start_checkout`, `recover_checkout`, `attach_existing`, `capture`, `cancel_authorization`, `refund`, `resolve_payment_exception` and `view`.
 - `ExistingPaymentOwnership::assertOwned($order, $payment)` verifies trusted evidence linking an imported Stripe payment to the host order. `$payment` is the documented native fact array in `PaymentGateway`.
 
-Defaults deny until configured. `PaymentGateway` remains the replaceable Stripe integration boundary; provider discovery preserves host bindings.
+Defaults deny until configured. Services reload canonical Eloquent actors before consulting host permissions; non-Eloquent identity freshness remains the host provider’s responsibility. `PaymentGateway` remains the replaceable Stripe integration boundary; provider discovery preserves host bindings.
 
 ## Native services
 
@@ -72,7 +72,7 @@ Route::post('/payments/stripe/webhook', function (Request $request, PaymentWebho
 });
 ```
 
-The service verifies the signing secret, freshness, envelope, account and mode before processing. It owns replay receipts and current Stripe reads. The consumer selects HTTP middleware and maps exceptions to its response policy. A browser checkout return is not payment evidence.
+The service verifies the signing secret, freshness, envelope, account and mode before processing. It owns replay receipts and current Stripe reads. The consumer selects its route name, HTTP middleware and exception mapping. Doctor checks package readiness without requiring a specific consumer route name. Process webhooks outside an ambient Payments transaction so provider reads precede local locking. A browser checkout return is not payment evidence.
 
 ## Recovery and ownership
 

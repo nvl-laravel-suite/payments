@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Services;
 
+use DomainException;
 use Illuminate\Support\Facades\Config;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Enums\PaymentsResponseCode;
@@ -34,6 +35,9 @@ final class PaymentWebhooks
         $secret = Config::get('nvl-payments.stripe.webhook_secret');
         if (Config::get('nvl-payments.enabled') !== true || ! is_string($secret) || $secret === '') {
             throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Payments webhook is unavailable.');
+        }
+        if (PaymentsModelRegistry::newAttempt()->getConnection()->transactionLevel() !== 0) {
+            throw new DomainException('Payments webhook processing must start outside a database transaction.');
         }
         try {
             WebhookSignature::verifyHeader($payload, $signature, $secret, 300);

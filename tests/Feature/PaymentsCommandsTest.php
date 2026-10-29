@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Route;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
@@ -63,9 +64,12 @@ it('sanitizes failed reconciliation output and continues the sweep', function ()
 it('reports a ready local installation in strict mode', function (): void {
     setupRefundHost();
     config(['nvl-payments.stripe.secret' => 'sk_test_private', 'nvl-payments.stripe.webhook_secret' => 'whsec_private', 'nvl-payments.allowed_currencies' => ['EUR'], 'nvl-payments.checkout.return_hosts' => ['shop.test']]);
+    Route::getRoutes()->getByName('nvl.payments.webhook')->name('consumer.payments.webhook');
+    Route::getRoutes()->refreshNameLookups();
+    expect(Route::has('nvl.payments.webhook'))->toBeFalse();
     expect(Artisan::call('nvl:payments:doctor', ['--strict' => true]))->toBe(0);
     $output = Artisan::output();
-    expect($output)->toContain('webhook_route: ready')->not->toContain('sk_test_private', 'whsec_private');
+    expect($output)->not->toContain('webhook_route', 'sk_test_private', 'whsec_private');
 });
 
 it('rejects a malformed target without printing it', function (): void {
