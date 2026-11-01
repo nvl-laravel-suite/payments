@@ -5,6 +5,16 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Align NVL peers and consumer contracts on the coordinated 7.x line. Review [UPGRADING.md](UPGRADING.md) for adoption and application-owned integration requirements.
+
+### Fixed
+
+- Prevent concurrent MySQL/MariaDB refunds from over-reserving captured funds by reading current reservations under the existing payment lock.
+- Fail strict Doctor readiness on invalid local monetary balances or incomplete financial columns, using private writer-side boolean probes; document destructive financial rollback and host recovery obligations.
+- Validate portable refund-note byte capacity, UTF-8 and NUL exclusion before provider access or financial reservation, preserving accepted bytes and UUID replay.
+
 ## [6.0.1] - 2026-10-21
 
 ### Changed

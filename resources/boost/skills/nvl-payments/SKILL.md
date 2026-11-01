@@ -1,42 +1,71 @@
 ---
 name: nvl-payments
-description: Use when integrating or reviewing one-time Stripe order payments with nvl/payments, including Checkout, authorization, capture, refunds, webhooks, and reconciliation.
+description: Use when integrating one-time Stripe order payments with nvl/payments, including hosted Checkout, manual capture, cancellation, refunds, verified webhooks, recovery and authorized timelines.
 ---
 
 # NVL Payments
 
-Use the native services in `Nvl\Payments\Services`. The host owns orders, prices, authorization, fulfillment, HTTP endpoints and response types. See the installed package README and service PHPDoc for exact signatures and native array shapes.
+Payments targets PHP 8.4 and Laravel 13 and requires Core and Stripe PHP.
+Billing, Cashier, Tenancy and DTO libraries are not required.
+The host owns orders, pricing, authorization, fulfillment and HTTP.
+Native services own provider identity, operation journals, balance reservations and reconciliation.
 
-## Configure and admit
+## Portable references
 
-Select one migration source and publish the package configuration only when overriding it. Keep Payments disabled until schema, Stripe configuration and required host bindings are ready. Bind `PaymentOrderProvider`, `PaymentManagementAccess` and `ExistingPaymentOwnership`; defaults deny. Resolve integer minor-unit amounts, currency and order revision from trusted host facts.
+- [Installation](references/installation.md): provider discovery, exact publish tags, migration ownership and storage setup.
+- [Native API](references/api.md): all public operations, gateway fact shapes, models and domain values.
+- [Usage](references/usage.md): required bindings, operation selection, complete examples and uncertain-response recovery.
 
-Configure the Stripe account, live/test mode, Payments-specific webhook secret, allowed currencies and HTTPS return hosts. Ordinary unowned hosts retain unscoped declarations. Native Ownership is optional and requires its own configured resources and admission; it does not grant business permission.
+Read installation for a new host or adoption task and usage before composing operations.
+Use the API's exact signatures and gateway array shapes instead of inferring a generic payment DTO.
+The references remain usable after Laravel Boost publishes the skill.
 
-## Native operations
+## Configure trusted order facts
 
-- `PaymentCheckout`: `start`, `recover`, `attach`.
-- `PaymentAuthorizations`: `capture`, `cancel`.
-- `PaymentRefunds`: `refund`.
-- `PaymentReconciliation`: `reconcile`, `resolveException`.
-- `PaymentWebhooks`: `process` with the untouched request body and signature.
-- `PaymentReadService`: authorized `forOrder` timeline arrays.
+Bind `PaymentOrderProvider`, `PaymentManagementAccess` and `ExistingPaymentOwnership`.
+Defaults deny until the host supplies order and ownership evidence.
+`OrderPaymentSnapshot` is a validated domain value with server-calculated integer minor units.
+Its order revision and owner come from trusted host data.
+Configure Stripe account/mode, Payments-specific webhook secret, allowed currencies and HTTPS return hosts.
+Enable Payments only when its schema and bindings are ready.
 
-Pass explicit actors and stable operation UUIDs. Retry uncertain operations with the same UUID and identical inputs. The refund note remains an explicit nullable argument. `OrderPaymentSnapshot` is a validated domain value; gateway and reader facts use documented arrays. Applications may wrap these services in their own Actions or DTOs.
+## Choose the complete operation
 
-## Preserve recovery behavior
+- `PaymentCheckout::start`: reserve or reuse an exact hosted checkout.
+- `PaymentCheckout::recover`: recover a stored attempt using a Stripe session identity.
+- `PaymentCheckout::attach`: import a provider payment only after explicit host ownership evidence.
+- `PaymentAuthorizations::capture` / `cancel`: settle or cancel an authorization.
+- `PaymentRefunds::refund`: reserve balance and issue an idempotent refund.
+- `PaymentReconciliation::reconcile` / `resolveException`: synchronize facts or explicitly accept an exception.
+- `PaymentWebhooks::process`: verify untouched signed request bytes and deduplicate.
+- `PaymentReadService::forOrder`: authorized, bounded timeline facts.
 
-Start checkout, authorization and refund operations outside an existing transaction. Remote calls are bracketed by local transactions and persisted operation IDs. Keep unknown operations and reserved balances through provider timeouts, and reconcile exact stored provider metadata before initiating another mutation. A browser checkout return is not payment evidence.
+## Keep financial recovery intact
 
-Manual capture is final, including partial capture. Pending or unknown refunds reserve balance. Reconciliation matches complete payment identity and operation metadata, not equal amounts. Resolve `payment_exception` only through the separately authorized service operation. Preserve the original order revision, source connection and after-commit notification behavior.
+Start checkout, capture/cancel and refunds outside an existing Payments source transaction.
+Provider calls are bracketed by native local transactions and persisted operation identities.
+Pass stable operation UUIDs and identical facts on retry.
+The refund note is an explicit required nullable argument.
+Manual capture is final, including partial capture.
+Pending/unknown refunds reserve balance until reconciled.
+Preserve unknown operations after provider timeouts; match complete stored identity and metadata.
+A browser checkout return is not payment evidence.
 
-The host owns its signed webhook endpoint and exception mapping. Schedule `nvl:payments:reconcile`, run `nvl:payments:doctor --strict`, and exercise actual Stripe test-mode checkout, capture, refund, replay and recovery before live use.
+## Actor, owner and model extension
 
-## Test the boundary
+Pass explicit actors; Eloquent policy inputs are reloaded from canonical storage.
+An owner reference does not grant management permission.
+Optional native Ownership requires registered resources, adoption and current admission.
+Configure `models.attempt` and `models.refund` before boot using concrete package subclasses.
+Retain native UUIDs, casts, persistence/query hooks, foreign keys and financial ownership.
+Operations, receipts and locks remain fixed native records.
+Configure the whole graph's connection/tables; subclass-only storage splits are rejected.
 
-Install `Testing\FakePaymentGateway::fake($container)` before resolving services. Script documented native arrays using `willReturn` or `willThrow`; queues and call history are per instance, exhausted scripts fail and closures remain inert. Gateway fakes isolate provider requests. Real service integration tests must still prove authorization, persistence, reservations, rollback and recovery. No package HTTP, passive payload DTO or duplicate workflow interface is required.
+## Results and diagnostics
 
-## Configured financial models
-
-Set `models.attempt` and `models.refund` to concrete package-model subclasses before boot. The frozen classes flow through native services, factories, refund relations, Ownership and restoration. Operations, webhooks and locks remain fixed.
-Retain required UUID identity, casts, query/persistence hooks and financial ownership declarations. Subclass-only table, connection or foreign-key changes are rejected; package-level storage configuration still applies to all records. Model configuration does not replace reviewed native adoption.
+Checkout returns `sessionId`, `url`, `expiresAt`; other mutations return refreshed payment/refund models.
+Reader arrays omit internal notes and operation credentials.
+The host chooses public projections and maps package failures.
+Use `FakePaymentGateway::fake($container)` before resolving services for provider-isolated tests.
+Run `nvl:payments:doctor --strict`; reconcile through `nvl:payments:reconcile`.
+Read usage for replay rules and source-backed checkout/refund examples.

@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\Actor;
 use Nvl\Ownership\Tests\Fixtures\Company;
+use Nvl\Ownership\Tests\Fixtures\NativeDatabaseSource;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
@@ -21,9 +22,9 @@ use Nvl\Support\Ownership\Contracts\OwnershipContext;
 
 uses(OwnerScopeTestCase::class);
 
-it('reserves one native owner refund across independent admitted PostgreSQL workers', function (): void {
-    if (DB::connection()->getDriverName() !== 'pgsql' || ! function_exists('pcntl_fork')) {
-        $this->markTestSkipped('Requires the dedicated native PostgreSQL process fixture.');
+it('reserves one native owner refund across independent admitted native workers', function (): void {
+    if (! in_array(DB::connection()->getDriverName(), ['pgsql', 'mysql', 'mariadb'], true) || ! function_exists('pcntl_fork')) {
+        $this->markTestSkipped('Requires the dedicated native PostgreSQL/MySQL/MariaDB process fixture.');
     }
     app()->bind(PaymentOrderProvider::class, fn () => new class implements PaymentOrderProvider
     {
@@ -43,16 +44,21 @@ it('reserves one native owner refund across independent admitted PostgreSQL work
     ])->id);
     $directory = sys_get_temp_dir().'/nvl-native-refund-'.Str::uuid();
     mkdir($directory);
-    $waitFor = static function (Closure $condition): void {
+    $waitFor = static function (Closure $condition) use ($directory): void {
         $deadline = microtime(true) + 15;
         while (! $condition()) {
             if (microtime(true) > $deadline) {
-                throw new RuntimeException('Native refund process barrier timed out.');
+                $state = [];
+                foreach (glob($directory.'/*') ?: [] as $path) {
+                    $state[basename($path)] = file_get_contents($path);
+                }
+                throw new RuntimeException('Native refund process barrier timed out: '.json_encode($state, JSON_THROW_ON_ERROR));
             }
             usleep(1000);
             clearstatcache();
         }
     };
+    $parentSource = NativeDatabaseSource::inspect(DB::connection());
     foreach (DB::getConnections() as $connection) {
         $connection->disconnect();
     }
@@ -66,6 +72,7 @@ it('reserves one native owner refund across independent admitted PostgreSQL work
             if ($pid === 0) {
                 try {
                     app()->forgetScopedInstances();
+                    NativeDatabaseSource::inspect(DB::connection(), $parentSource);
                     $gateway = Mockery::mock(PaymentGateway::class);
                     $gateway->shouldReceive('payment')->andReturn(['paymentIntentId' => 'pi_native_race', 'chargeId' => 'ch_native_race', 'accountId' => 'acct_native', 'livemode' => false, 'amountMinor' => 1000, 'capturedAmountMinor' => 1000, 'refundedAmountMinor' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captureMethod' => 'automatic', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null]);
                     $gateway->shouldReceive('refunds')->andReturnUsing(function () use ($directory, $worker, $waitFor): array {

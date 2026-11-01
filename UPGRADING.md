@@ -8,6 +8,18 @@ Native operations now reload Eloquent actors before host authorization. Doctor n
 
 Register a consumer webhook route calling `PaymentWebhooks::process($rawPayload, $signature)`; the service now owns signature verification. Remove package route/controller/middleware imports, passive result value-object imports, old workflow bindings and the retired Tenancy bridge. Preserve existing operation UUIDs, Stripe metadata, journals and owner adoption. The validated `OrderPaymentSnapshot` retains its exact JSON fingerprint shape. See the current README for integration. Earlier version notes below describe historical releases.
 
+## Financial storage retention and rollback
+
+The historical creating migration deliberately retains its original behavior: `down()` drops webhook receipts, refunds, operations and payment attempts. `migrate:rollback`, `migrate:reset` or `migrate:fresh` can therefore destroy financial history and idempotency/replay evidence. The package adds no automatic financial retention period, pruning command or protective rollback guard. Keep the host's retention, access and retirement policy explicit.
+
+For ordinary release rollback, retain the database and choose code compatible with its existing schema. Before intentional storage retirement or recovery, stop new money-moving requests and webhook admission, drain or pause workers, and reconcile or record every unresolved provider operation. Take a consistent, access-controlled, restorable backup of all four Payments tables and migration history together with related host order and Ownership/adoption metadata; preserve provider identities, operation UUIDs and idempotency keys. Protect retained notes under the host's backup and access controls; their native TEXT storage is not package-encrypted. Verify restoration before dropping storage.
+
+Restore a consistent recovery point before replaying work. Reconcile current Stripe facts and any provider effects that occurred after the backup before resuming requests, webhooks or workers. Restoring older replay receipts or journals alone does not undo provider effects and can permit duplicate work. Keep the original migration files and hashes unchanged; deploying the current checks requires no financial data conversion or destructive rollback.
+
+Doctor now fails strict readiness for incomplete monetary columns, invalid local payment/refund bounds and aggregate live refund reservations above the original payment. It inspects the configured writer even when a read replica is clean or stale, emits only boolean results, and fails closed on source errors. It does not repair ledger rows, add database CHECK constraints, or certify remote provider agreement. Review and reconcile a reported inconsistency through the host's authorized recovery process.
+
+Refund notes now require valid UTF-8 without NUL and at most 65,535 bytes, matching the portable native TEXT capacity. Null and empty strings remain distinct, and accepted bytes are unchanged for idempotency. Invalid notes raise the existing primitive-input `InvalidArgumentException` before provider reads or financial reservation. Existing stored notes are neither truncated nor rewritten; review nonportable historical values before retrying those exact inputs after upgrade.
+
 ## 6.0.1 consolidation patch
 
 When Ownership is installed, this package requires version 6.0.1 or later. Ownership remains optional. Update the installed NVL dependency closure together so Composer can select compatible patches.

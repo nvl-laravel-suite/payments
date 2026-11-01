@@ -43,7 +43,7 @@ final class RefundBalance
             }
         }
         $localReserved = 0;
-        foreach (PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)->get() as $local) {
+        foreach (PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)->orderBy('id')->lockForUpdate()->get() as $local) {
             $known = $local->stripe_refund_id === null ? null : ($remote[$local->stripe_refund_id] ?? null);
             if ($known !== null) {
                 $this->assertMatches($attempt, $known, $local);

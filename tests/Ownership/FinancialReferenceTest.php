@@ -44,8 +44,8 @@ it('freezes settled charge identity while permitting pre-settlement replacement 
     });
 });
 
-it('denies financial effects without complete live provider correlation uniqueness', function (bool $partial): void {
-    app(OwnershipRunner::class)->run(Company::query()->findOrFail(7), Actor::query()->findOrFail(1), function () use ($partial): void {
+it('denies financial effects without complete live provider correlation uniqueness', function (bool $incomplete): void {
+    app(OwnershipRunner::class)->run(Company::query()->findOrFail(7), Actor::query()->findOrFail(1), function () use ($incomplete): void {
         $model = new PaymentAttempt;
         $schema = $model->getConnection()->getSchemaBuilder();
         $name = null;
@@ -56,11 +56,14 @@ it('denies financial effects without complete live provider correlation uniquene
         }
         expect($name)->toBeString();
         $schema->table($model->getTable(), fn (Blueprint $table) => $table->dropUnique($name));
-        if ($partial) {
+        if ($incomplete) {
             $grammar = $model->getConnection()->getQueryGrammar();
-            $model->getConnection()->statement('CREATE UNIQUE INDEX '.$grammar->wrap($name).' ON '.$grammar->wrapTable($model->getTable()).' (stripe_payment_intent_id) WHERE 1 = 0');
+            $coverage = in_array($model->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
+                ? '('.$grammar->wrap('stripe_payment_intent_id').'(8))'
+                : '('.$grammar->wrap('stripe_payment_intent_id').') WHERE 1 = 0';
+            $model->getConnection()->statement('CREATE UNIQUE INDEX '.$grammar->wrap($name).' ON '.$grammar->wrapTable($model->getTable()).' '.$coverage);
         }
         expect(fn () => app(PaymentsIntegrityGuard::class)->assertReady())
             ->toThrow(OwnershipSchemaNotReady::class);
     });
-})->with(['missing' => false, 'partial' => true]);
+})->with(['missing' => false, 'incomplete' => true]);

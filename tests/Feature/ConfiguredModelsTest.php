@@ -15,6 +15,7 @@ use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\PaymentCheckout;
 use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Services\PaymentRefunds;
+use Nvl\Payments\Services\PaymentsDoctor;
 use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Payments\Testing\FakePaymentGateway;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
@@ -87,6 +88,18 @@ it('creates configured payment and refund roots through the shipped factories', 
     $refund = PaymentRefund::factory()->create();
     expect($refund)->toBeInstanceOf(ConfiguredPaymentRefundFixture::class)
         ->and($refund->paymentAttempt)->toBeInstanceOf(ConfiguredPaymentAttemptFixture::class);
+});
+
+it('inspects monetary bounds on the configured financial source and table', function (): void {
+    $attempt = PaymentAttempt::factory()->create(['amount_minor' => 1200, 'captured_amount_minor' => 1200, 'refunded_amount_minor' => 0]);
+    $checks = app(PaymentsDoctor::class)->inspect();
+
+    expect($checks['schema_custom_payment_attempts'])->toBeTrue()
+        ->and($checks['schema_custom_payment_refunds'])->toBeTrue()
+        ->and($checks['financial_attempt_amounts'])->toBeTrue();
+
+    $attempt->update(['refunded_amount_minor' => 1201]);
+    expect(app(PaymentsDoctor::class)->inspect()['financial_attempt_amounts'])->toBeFalse();
 });
 
 it('uses configured refunds in native service reads relations restoration and rollback', function (): void {

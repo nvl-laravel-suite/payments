@@ -60,6 +60,9 @@ final class PaymentRefunds
             || ! Str::isUuid($operationId) || (! is_string($actorId) && ! is_int($actorId)) || trim((string) $actorId) === '') {
             throw new InvalidArgumentException('A valid refund amount, reason, operation UUID, and stable actor are required.');
         }
+        if ($note !== null && (strlen($note) > 65535 || str_contains($note, "\0") || preg_match('//u', $note) !== 1)) {
+            throw new InvalidArgumentException('Refund note must be valid UTF-8 without NUL and at most 65535 bytes.');
+        }
         $connection = $attempt->getConnection();
         if ($connection->transactionLevel() !== 0) {
             throw new DomainException('Refunds must start outside a database transaction.');

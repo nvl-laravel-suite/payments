@@ -100,6 +100,41 @@ it('rejects nonpositive amounts and unsupported reasons before remote access', f
     expect(PaymentOperation::count())->toBe(0);
 })->with([[0, 'duplicate'], [-1, 'duplicate'], [700, 'arbitrary']]);
 
+it('rejects invalid refund notes before provider access or financial reservation', function (string $note): void {
+    $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
+    $this->gateway->shouldReceive('refunds')->andReturn([]);
+    $this->gateway->shouldReceive('refund')->andReturn(remoteRefund());
+
+    expect(fn () => refundPayment(700, $this->uuid, note: $note))->toThrow(InvalidArgumentException::class, 'Refund note');
+    $this->gateway->shouldNotHaveReceived('payment');
+    $this->gateway->shouldNotHaveReceived('refunds');
+    $this->gateway->shouldNotHaveReceived('refund');
+    expect(PaymentOperation::count())->toBe(0)
+        ->and(PaymentRefund::count())->toBe(0);
+})->with([
+    'exceeds TEXT byte capacity' => [str_repeat('x', 65536)],
+    'multibyte byte overflow' => [str_repeat('😀', 16384)],
+    'invalid UTF-8' => ["\xC3\x28"],
+    'NUL cannot round trip across native text engines' => ["private\0note"],
+]);
+
+it('preserves portable refund note bytes and idempotent replay at the storage boundary', function (?string $note): void {
+    $this->gateway->shouldReceive('payment')->once()->andReturn(refundPaymentState());
+    $this->gateway->shouldReceive('refunds')->once()->andReturn([]);
+    $this->gateway->shouldReceive('refund')->once()->andReturn(remoteRefund());
+
+    $refund = refundPayment(700, $this->uuid, note: $note);
+    expect(PaymentRefund::sole()->getRawOriginal('internal_note'))->toBe($note)
+        ->and(refundPayment(700, $this->uuid, note: $note))->toEqual($refund)
+        ->and(PaymentOperation::count())->toBe(1)
+        ->and(PaymentRefund::count())->toBe(1);
+})->with([
+    'null' => [null],
+    'empty string' => [''],
+    'maximum ASCII bytes' => [str_repeat('x', 65535)],
+    'maximum multibyte bytes' => [str_repeat('😀', 16383).'€'],
+]);
+
 it('classifies refunds exceeding the original balance before remote access', function (): void {
     try {
         refundPayment(1201, reason: 'duplicate');

@@ -68,7 +68,7 @@ it('reads conservative balances using a fixed number of queries', function (int 
     DB::connection()->enableQueryLog();
     $timeline = app(PaymentReadService::class)->forOrder('order-1', new GenericUser(['id' => 'admin']));
     $queries = collect(DB::connection()->getQueryLog());
-    $dataQueries = $queries->filter(fn (array $query): bool => str_starts_with($query['query'], 'select * from "nvl_payments_'));
+    $dataQueries = $queries->filter(fn (array $query): bool => str_starts_with(str_replace(['"', '`'], '', $query['query']), 'select * from nvl_payments_'));
     expect($dataQueries)->toHaveCount(2)->and($queries->count() - $dataQueries->count())->toBe(5)->and($timeline['payments'])->toHaveCount($count)
         ->and($timeline['payments'][0]['refundedAmountMinor'])->toBe(200)->and($timeline['payments'][0]['refundableAmountMinor'])->toBe(700)
         ->and($timeline['payments'][0]['reservedRefundAmountMinor'])->toBe(300)->and($timeline['refunds'])->toHaveCount($count * 2);

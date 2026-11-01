@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 
@@ -97,4 +100,133 @@ it('advances bounded sweeps past permanently unresolved attempts', function (): 
         expect($attempt->refresh()->reservation_key)->not->toBeNull()->and($attempt->last_synced_at)->toBeNull()
             ->and($attempt->last_reconcile_attempt_at)->not->toBeNull();
     }
+});
+
+describe('local ledger readiness', function (): void {
+    beforeEach(function (): void {
+        setupRefundHost();
+        config([
+            'nvl-payments.stripe.secret' => 'sk_ledger_private',
+            'nvl-payments.stripe.webhook_secret' => 'whsec_ledger_private',
+            'nvl-payments.allowed_currencies' => ['EUR'],
+            'nvl-payments.checkout.return_hosts' => ['shop.test'],
+        ]);
+    });
+
+    it('rejects corrupt persisted attempt amounts without disclosing ledger facts', function (array $amounts): void {
+        $attempt = createRefundAttempt();
+        $attempt->forceFill($amounts)->save();
+
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+        $output = Artisan::output();
+        $checks = json_decode($output, true, flags: JSON_THROW_ON_ERROR)['checks'];
+
+        expect($checks['financial_attempt_amounts'])->toBeFalse()
+            ->and($output)->not->toContain($attempt->id, 'order-1', 'sk_ledger_private', 'whsec_ledger_private');
+    })->with([
+        'zero total' => [['amount_minor' => 0, 'captured_amount_minor' => 0, 'refunded_amount_minor' => 0]],
+        'capture exceeds original total' => [['captured_amount_minor' => 1201]],
+        'refund exceeds captured total' => [['refunded_amount_minor' => 1201]],
+    ]);
+
+    it('rejects an out of bounds persisted refund amount', function (int $amount): void {
+        reconciliationRefund(createRefundAttempt(), null, 'reserved', $amount);
+
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+        expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['financial_refund_amounts'])->toBeFalse();
+    })->with(['zero' => [0], 'exceeds original payment' => [1201]]);
+
+    it('rejects aggregate live refund reservations above the original payment', function (): void {
+        $attempt = createRefundAttempt();
+        reconciliationRefund($attempt, null, 'reserved', 700);
+        reconciliationRefund($attempt, null, 'pending', 700);
+
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+        expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['financial_refund_reservations'])->toBeFalse();
+    });
+
+    it('accepts valid balances while excluding released refund reservations', function (): void {
+        $attempt = createRefundAttempt();
+        $attempt->update(['refunded_amount_minor' => 700]);
+        reconciliationRefund($attempt, 're_pending', 'pending', 700);
+        reconciliationRefund($attempt, 're_failed', 'failed', 700);
+        reconciliationRefund($attempt, 're_canceled', 'canceled', 700);
+
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(0);
+        $checks = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks'];
+        expect($checks['financial_attempt_amounts'])->toBeTrue()
+            ->and($checks['financial_refund_amounts'])->toBeTrue()
+            ->and($checks['financial_refund_reservations'])->toBeTrue();
+    });
+
+    it('fails closed before probing an incomplete ledger schema', function (): void {
+        $connection = (new PaymentAttempt)->getConnection();
+        $connection->getSchemaBuilder()->table(PaymentsTables::get(PaymentsTables::Attempts), function (Blueprint $table): void {
+            $table->dropColumn('refunded_amount_minor');
+        });
+
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+        expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['financial_attempt_amounts'])->toBeFalse();
+    });
+
+    it('fails closed without exposing a ledger inspection source error', function (): void {
+        $connection = (new PaymentAttempt)->getConnection();
+        $connection->beforeExecuting(function (string $query): void {
+            if (str_contains(strtolower($query), 'select exists(')) {
+                throw new PDOException('private-ledger-source-error');
+            }
+        });
+
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+        $output = Artisan::output();
+        $checks = json_decode($output, true, flags: JSON_THROW_ON_ERROR)['checks'];
+        expect($checks['schema_connection'])->toBeFalse()
+            ->and($checks['financial_attempt_amounts'])->toBeFalse()
+            ->and($output)->not->toContain('private-ledger-source-error');
+    });
+
+    it('inspects the configured writer rather than a lagging or corrupt replica', function (): void {
+        $attempt = createRefundAttempt();
+        $connection = $attempt->getConnection();
+
+        if ($connection->getDriverName() !== 'sqlite') {
+            $this->markTestSkipped('The adversarial read/write fixture uses two independent SQLite stores; native ledger checks run in the other cases.');
+        }
+
+        expect($connection->transactionLevel())->toBe(0);
+        config(['database.connections.payments_doctor_replica' => ['driver' => 'sqlite', 'database' => ':memory:', 'foreign_key_constraints' => true]]);
+        $replica = DB::connection('payments_doctor_replica');
+        $default = config('database.default');
+        $originalReadPdo = $connection->getReadPdo();
+        $rawAttempt = $attempt->getAttributes();
+
+        try {
+            config(['database.default' => 'payments_doctor_replica']);
+            try {
+                (require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php')->up();
+            } finally {
+                config(['database.default' => $default]);
+            }
+
+            $attempt->update(['refunded_amount_minor' => 1201]);
+            $connection->setReadPdo($replica->getPdo());
+            expect($connection->table(PaymentsTables::get(PaymentsTables::Attempts))->exists())->toBeFalse();
+            expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+            expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['financial_attempt_amounts'])->toBeFalse();
+
+            $connection->table(PaymentsTables::get(PaymentsTables::Attempts))->where('id', $attempt->id)->update(['refunded_amount_minor' => 0]);
+            $replica->table(PaymentsTables::get(PaymentsTables::Attempts))->insert([...$rawAttempt, 'refunded_amount_minor' => 1201]);
+            expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(0);
+            expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['financial_attempt_amounts'])->toBeTrue();
+
+            foreach ([PaymentsTables::WebhookEvents, PaymentsTables::Refunds, PaymentsTables::Operations, PaymentsTables::Attempts] as $table) {
+                $replica->getSchemaBuilder()->drop(PaymentsTables::get($table));
+            }
+            expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(0);
+            expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['schema_'.PaymentsTables::get(PaymentsTables::Attempts)])->toBeTrue();
+        } finally {
+            $connection->setReadPdo($originalReadPdo);
+            DB::purge('payments_doctor_replica');
+        }
+    });
 });

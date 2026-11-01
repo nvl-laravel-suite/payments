@@ -22,7 +22,7 @@ class PaymentsTestCase extends TestCase
     /** Configure an isolated default database without enabling Payments. */
     protected function defineEnvironment($app): void
     {
-        $driver = getenv('NVL_FULL_DATABASE') === '1' ? (getenv('DB_CONNECTION') ?: 'sqlite') : 'sqlite';
+        $driver = getenv('NVL_C1_TEST_DRIVER') ?: (getenv('NVL_FULL_DATABASE') === '1' ? (getenv('DB_CONNECTION') ?: 'sqlite') : 'sqlite');
         $database = $driver === 'sqlite' ? ':memory:' : (getenv('DB_DATABASE') ?: 'testing');
 
         $app['config']->set([

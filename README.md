@@ -54,7 +54,7 @@ $attempt = $checkouts->attach($orderReference, $stripeReference, $operationId, $
 $attempt = $reconciliation->resolveException($attempt, $operationId, $actor);
 ```
 
-Attempt parameters accept a `PaymentAttempt` or its ID. Refund amounts are exact positive integer minor units. The nullable internal note is an explicit required argument. Keep stable UUIDs and identical inputs for retries; changed input under the same UUID is rejected.
+Attempt parameters accept a `PaymentAttempt` or its ID. Refund amounts are exact positive integer minor units. The nullable internal note is an explicit required argument: retain `null` or an unchanged UTF-8 string without NUL, at most 65,535 bytes. Empty strings remain distinct from null. Invalid notes reject before provider access or financial reservation. Notes use the native private TEXT field; the package does not encrypt or redact them. Keep stable UUIDs and identical inputs for retries; changed input under the same UUID is rejected.
 
 Gateway hosted checkout, payment, checkout state and refund facts are native arrays with complete shapes documented on `PaymentGateway`. `OrderPaymentSnapshot` remains a validated immutable domain value object. Its JSON fingerprint contains the original order fact keys, independent of ownership admission metadata.
 
@@ -83,6 +83,10 @@ Manual card capture is final, including partial capture. Pending/unknown refunds
 Unowned hosts use ordinary unscoped declarations. Install native Ownership separately for isolated configured models and reviewed adoption. The trusted order owner and actor must match current admitted ownership. Disabling Ownership does not undo adopted storage protection. The retired Tenancy bridge is unavailable.
 
 Run `nvl:payments:doctor --strict`, schedule `nvl:payments:reconcile`, and exercise actual Stripe test-mode checkout, capture, refund, replay and recovery before live use.
+
+Doctor checks the configured writer's required amount columns, positive payment/refund amounts, captured/refunded counter bounds, and live local refund reservations against the original payment total. Failed and canceled refunds release that reservation. These read-only checks return booleans, including on unavailable or incomplete sources; they neither enforce database constraints nor prove agreement with current Stripe state. Investigate failures through authorized private host tooling and reconciliation before allowing further financial effects.
+
+The creating migration's `down()` drops all four Payments tables, including operation journals and webhook replay receipts. Keep financial history under an explicit host retention and backup policy; use the recovery procedure in [UPGRADING.md](UPGRADING.md#financial-storage-retention-and-rollback) before any intentional database retirement. A routine application deployment rollback must preserve this storage.
 
 ## Testing your app
 
