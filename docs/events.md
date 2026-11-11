@@ -22,7 +22,7 @@ Use Nvl\Support\Events\DomainEventDispatcher::dispatch($event, $writerConnection
 
 Host order reference, payment attempt/state and canonical Stripe references only. No customer data, raw provider payload, card details or payment exception object.
 
-PaymentStateSyncer emits only changed financial state/facts; ResolvePaymentExceptionAction publishes the successful explicit resolution. Matching webhook/reconcile observations retain native state guards.
+PaymentStateSyncer emits only changed financial state/facts; `PaymentReconciliation::resolveException()` publishes the successful explicit resolution. Matching webhook/reconcile observations retain native state guards.
 
 Actor/owner identifiers do not grant access. Listeners must preserve the captured ownership and apply their own authorization when reading storage. Readonly payload fields and native value objects are schema facts; public constructors with mixed arrays do not create a new recursive sanitization boundary. Package producer shapes are documented below; hosts must not attach models, mutable service objects or private arbitrary data.
 
@@ -68,7 +68,7 @@ Producers and exact scheduling connection expressions (variables are resolved in
 
 | Producer | Source connection |
 | --- | --- |
-| [Actions/ResolvePaymentExceptionAction.php](../src/Actions/ResolvePaymentExceptionAction.php) | `$connection = $attempt->getConnection()` |
+| [Services/PaymentReconciliation.php](../src/Services/PaymentReconciliation.php) | `$connection = $attempt->getConnection()` |
 | [Services/PaymentStateSyncer.php](../src/Services/PaymentStateSyncer.php) | `$connection = (new PaymentAttempt)->getConnection()` |
 
 ## Deferred acceptance checks

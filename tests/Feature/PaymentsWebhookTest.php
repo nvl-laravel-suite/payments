@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Events\PaymentStateChanged;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
 use Nvl\Payments\Services\PaymentStateSyncer;
@@ -214,4 +215,19 @@ it('waits for the configured Payments connection rather than the default connect
     expect($events)->toHaveCount(1);
     $migration->down();
     config(['nvl-payments.connection' => null]);
+});
+
+it('keeps the raw webhook body and signature out of exception traces', function (): void {
+    $ignored = ini_set('zend.exception_ignore_args', '0');
+    config(['nvl-payments.enabled' => false]);
+    try {
+        app(PaymentWebhooks::class)->process('{"customer_email":"private@example.test"}', 't=1,v1=signature');
+        $this->fail('A disabled Payments webhook must be refused.');
+    } catch (PaymentsException $failure) {
+        $frame = collect($failure->getTrace())->first(fn (array $frame): bool => ($frame['class'] ?? null) === PaymentWebhooks::class && $frame['function'] === 'process');
+    } finally {
+        ini_set('zend.exception_ignore_args', (string) $ignored);
+    }
+
+    expect($frame['args'] ?? [])->toHaveCount(2)->each->toBeInstanceOf(SensitiveParameterValue::class);
 });

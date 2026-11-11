@@ -5,6 +5,16 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Release the order when Stripe refuses a Checkout request outright (invalid request, rejected or restricted credential, rate limit): the attempt becomes `failed` and the next `start` creates a new Session. Previously the order stayed reserved with no Session to recover and could never be paid. Uncertain failures still stay reserved.
+- Stop counting a released hold as a refund. Stripe reports a canceled, expired or partially captured authorization on the charge as refunded, so cancellation, expiry and captures below half of the hold were rejected as a provider mismatch and left the attempt `authorized`; larger partial captures appeared `partially_refunded`.
+- Keep `nvl:payments:reconcile` running when one native owner is refused system admission. The refusal is reported and counted as failed instead of aborting the sweep for every later owner on each run.
+- Store the provider Checkout expiry as the same instant when the application timezone is not UTC; `expiresAt` was shifted by the UTC offset.
+- Treat a malformed attempt ID as not found in `refund`, `capture`, `cancel`, `recover`, `reconcile` and `resolveException` instead of a PostgreSQL type error, and reject a malformed `resolveException` operation UUID before any lookup or provider read.
+- Keep the raw webhook body and signature out of exception traces (`#[\SensitiveParameter]` on `PaymentWebhooks::process`).
+- Correct the event documentation's producer link and mark the retired 5.x Action and contract notes in the upgrade guide as historical.
+
 ## [7.0.1] - 2026-11-09
 
 ### Changed

@@ -8,6 +8,14 @@ Native operations now reload Eloquent actors before host authorization. Doctor n
 
 Register a consumer webhook route calling `PaymentWebhooks::process($rawPayload, $signature)`; the service now owns signature verification. Remove package route/controller/middleware imports, passive result value-object imports, old workflow bindings and the retired Tenancy bridge. Preserve existing operation UUIDs, Stripe metadata, journals and owner adoption. The validated `OrderPaymentSnapshot` retains its exact JSON fingerprint shape. See the current README for integration. Earlier version notes below describe historical releases.
 
+## Checkout, capture and reconciliation corrections
+
+No schema or data change. A Checkout request Stripe refuses outright now releases the order: its attempt becomes `failed` with no Session and no reservation, and its operation `failed`. Attempts left `reserved` by such a refusal before this release are not rewritten; release them through reviewed host tooling after confirming Stripe holds no Session for their operation key. Timeouts and other uncertain failures still stay reserved.
+
+Gateway payment facts no longer count a released hold as a refund. Attempts that stayed `authorized` because a canceled, expired or partially captured authorization was rejected as a mismatch synchronize on the next webhook or `nvl:payments:reconcile`. A custom `PaymentGateway` must report `refundedAmountMinor` for captured money only.
+
+`nvl:payments:reconcile` no longer aborts with an `OwnershipViolation` when one native owner is refused system admission; it reports the refusal, continues and exits non-zero. Stored Checkout expiry now keeps the provider instant in applications whose timezone is not UTC. Malformed attempt IDs raise `ModelNotFoundException` on every driver, and `resolveException` rejects a malformed operation UUID before any provider read.
+
 ## Financial storage retention and rollback
 
 The historical creating migration deliberately retains its original behavior: `down()` drops webhook receipts, refunds, operations and payment attempts. `migrate:rollback`, `migrate:reset` or `migrate:fresh` can therefore destroy financial history and idempotency/replay evidence. The package adds no automatic financial retention period, pruning command or protective rollback guard. Keep the host's retention, access and retirement policy explicit.
@@ -46,6 +54,8 @@ Factories ship in runtime package mappings for host tests. Ordinary make may per
 
 ## Major 5: runtime gateway fake
 
+Historical 5.x note. In 7.x the fake scripts the documented native fact arrays (and lists of refund fact arrays), not value objects, and no package Actions exist.
+
 `Nvl\Payments\Testing\FakePaymentGateway` implements the existing PaymentGateway without changing the production provider, Action constructors or gateway signatures. Install it with `fake($container)` before constructing host services; late replacement affects new resolutions. It requires the Core major 5 runtime FakeCalls helpers, queues explicit per-method FIFO results/exceptions and records named arguments before every attempt. Use null scripts for expireCheckout and actual native value objects for typed responses. Wrong types, unsupported names and exhausted scripts fail clearly; predicates receive immutable Core FakeCall records. No schema or data migration is required. See [Testing your app](README.md#testing-your-app), and retain real lifecycle and transport coverage.
 
 Payments is a new optional package with no previous NVL Payments schema. Install it separately from `nvl/laravel-suite`; it needs only Core among NVL packages. Existing Billing subscriptions and Cashier customer models remain independent.
@@ -56,11 +66,13 @@ If importing historical payments, require host ownership proof for every Stripe 
 
 ## Shared Doctor integration
 
-The loaded package provider now contributes its existing inspection checks to Core's `nvl:doctor --strict --format=json`. The package command remains available. The shared gate fails errors and, in strict mode, warnings; no data upgrade is required for diagnostics.
+The loaded package provider now contributes its existing inspection checks to Core's `nvl:doctor --strict --format=json`. In family 7, register `Nvl\Support\Providers\DoctorServiceProvider` in the host first; it is not auto-discovered. The package command remains available. The shared gate fails errors and, in strict mode, warnings; no data upgrade is required for diagnostics.
 
 ## Next major: isolated schema identities
 
 This is a breaking schema identity change. Back up storage and migration history, pause writes/workers, install this code with automatic package migrations disabled, and select one owner for migrations (vendor or published).
+
+The `nvl:schema:*` commands ship through the 6.x line only. Family 7 does not register them, so complete this step before upgrading to 7.
 
 ```sh
 php artisan nvl:doctor --strict --format=json
@@ -76,11 +88,15 @@ DDL transactions are driver dependent and per connection. Inspect dry-run warnin
 
 ## Tagged consumer PHP boundary
 
+Historical 5.x note. The Actions and the package webhook endpoint named below were removed by the NVL Light boundary at the top of this guide; use the native services and a consumer-owned webhook route.
+
 Use source `@api` workflows, extension contracts, and value types for application integration. Direct use of untagged implementations or `@internal` members is unsupported. This classification keeps existing concrete Action signatures and runtime behavior; it does not authorize package model persistence, ad hoc queries, relation traversal, or generic model serialization. Returned models are identity/result handles with only the explicitly declared in-memory read fields described in the README.
 
 The implementation Actions `ProcessPaymentsWebhookAction`, `ReconcilePaymentAction` are explicitly internal. Deliver provider webhooks to the configured package webhook endpoint and run `nvl:payments:reconcile` for reconciliation; use `StartCheckoutAction`, `RecoverCheckoutAction`, and the supported payment mutation Actions for application workflows.
 
 ## Major 5: focused workflow contracts
+
+Historical 5.x note. These workflow contracts, `PaymentReadContract` and the concrete Actions no longer exist in 7.x; inject the native services listed at the top of this guide.
 
 Application services can now inject `Nvl\Payments\Contracts\StartCheckoutContract`, `AttachExistingPaymentContract`, `RecoverCheckoutContract`, `CapturePaymentContract`, `CancelAuthorizationContract`, `RefundPaymentContract`, and `ResolvePaymentExceptionContract` instead of their matching final concrete Actions. Inject `PaymentReadContract` instead of `PaymentReadService` for authorized order timelines. Each interface copies the current public method and result type; the nullable refund note remains a required argument.
 

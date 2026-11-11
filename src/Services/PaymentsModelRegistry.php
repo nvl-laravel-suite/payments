@@ -8,6 +8,8 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Support\Models\ConfiguredModelRegistration;
@@ -96,6 +98,18 @@ final class PaymentsModelRegistry
     public static function attemptQuery(): Builder
     {
         return self::newAttempt()->newQuery();
+    }
+
+    /** Find a configured attempt, treating a malformed identifier as absent before it reaches the UUID key.
+     * @internal
+     */
+    public static function findAttemptOrFail(string $id): PaymentAttempt
+    {
+        if (! Str::isUuid($id)) {
+            throw (new ModelNotFoundException)->setModel(self::attemptClass(), [$id]);
+        }
+
+        return self::attemptQuery()->findOrFail($id);
     }
 
     /** Resolve and validate the deployment's effective refund model.

@@ -30,7 +30,8 @@ beforeEach(function (): void {
     };
     ApiRequestor::setHttpClient($this->transport);
     $this->gateway = new StripePaymentGateway(new StripeClient('sk_test_fake'), 'acct_expected', false);
-    $this->charge = ['id' => 'ch_one', 'object' => 'charge', 'livemode' => false, 'amount' => 1200, 'amount_captured' => 1000, 'amount_refunded' => 200, 'currency' => 'eur', 'status' => 'succeeded', 'captured' => true, 'payment_intent' => 'pi_one'];
+    // A 1000 partial capture of a 1200 hold: Stripe counts the 200 released remainder plus a 200 refund as refunded.
+    $this->charge = ['id' => 'ch_one', 'object' => 'charge', 'livemode' => false, 'amount' => 1200, 'amount_captured' => 1000, 'amount_refunded' => 400, 'currency' => 'eur', 'status' => 'succeeded', 'captured' => true, 'payment_intent' => 'pi_one'];
     $this->intent = ['id' => 'pi_one', 'object' => 'payment_intent', 'livemode' => false, 'amount' => 1200, 'amount_received' => 1000, 'currency' => 'eur', 'status' => 'succeeded', 'capture_method' => 'manual', 'latest_charge' => $this->charge];
     $this->session = ['id' => 'cs_one', 'object' => 'checkout.session', 'livemode' => false, 'mode' => 'payment', 'url' => 'https://checkout.stripe.com/test', 'expires_at' => 1800000000, 'payment_intent' => 'pi_one', 'status' => 'open', 'payment_status' => 'unpaid', 'amount_total' => 1200, 'currency' => 'eur', 'metadata' => ['order_reference' => 'order-1', 'order_revision' => 'rev-2']];
     $this->refund = ['id' => 're_one', 'object' => 'refund', 'payment_intent' => 'pi_one', 'charge' => 'ch_one', 'amount' => 200, 'currency' => 'eur', 'status' => 'pending', 'reason' => 'requested_by_customer'];

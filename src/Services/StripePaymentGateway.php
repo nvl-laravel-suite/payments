@@ -100,7 +100,7 @@ final class StripePaymentGateway implements PaymentGateway
             return $this->payment($this->reference($charge->payment_intent) ?? throw new UnexpectedValueException('Missing PaymentIntent ID.'));
         }
 
-        return ['paymentIntentId' => null, 'chargeId' => $charge->id, 'accountId' => $this->accountId, 'livemode' => $charge->livemode, 'amountMinor' => $charge->amount, 'capturedAmountMinor' => $charge->amount_captured, 'refundedAmountMinor' => $charge->amount_refunded, 'currency' => $charge->currency, 'status' => $charge->captured ? $charge->status : ($charge->status === 'succeeded' ? 'requires_capture' : $charge->status), 'captureMethod' => $charge->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
+        return ['paymentIntentId' => null, 'chargeId' => $charge->id, 'accountId' => $this->accountId, 'livemode' => $charge->livemode, 'amountMinor' => $charge->amount, 'capturedAmountMinor' => $charge->amount_captured, 'refundedAmountMinor' => $this->refundedCapturedAmount($charge), 'currency' => $charge->currency, 'status' => $charge->captured ? $charge->status : ($charge->status === 'succeeded' ? 'requires_capture' : $charge->status), 'captureMethod' => $charge->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
     }
 
     /**
@@ -213,7 +213,16 @@ final class StripePaymentGateway implements PaymentGateway
         $partialAuthorization = $card instanceof StripeObject ? $card['partial_authorization'] : null;
         $partialStatus = $partialAuthorization instanceof StripeObject ? $partialAuthorization['status'] : null;
 
-        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, 'refundedAmountMinor' => $charge->amount_refunded ?? 0, 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null];
+        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, 'refundedAmountMinor' => $charge instanceof Charge ? $this->refundedCapturedAmount($charge) : 0, 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null];
+    }
+
+    /**
+     * Stripe also counts a released hold as refunded: canceling, expiring or partially capturing an
+     * authorization adds the uncaptured amount to the charge's refunded total. Report captured money only.
+     */
+    private function refundedCapturedAmount(Charge $charge): int
+    {
+        return max(0, $charge->amount_refunded - ($charge->amount - $charge->amount_captured));
     }
 
     /**

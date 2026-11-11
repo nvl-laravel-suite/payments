@@ -51,7 +51,7 @@ final class PaymentAuthorizations
     /** Reserve one final authorization operation before making remote calls outside transactions. */
     private function execute(string $kind, string $attemptId, Authenticatable $actor, ?int $amountMinor, string $operationId): PaymentAttempt
     {
-        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::findAttemptOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, $kind, $order);

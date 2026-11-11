@@ -434,7 +434,7 @@ public function refund(Nvl\Payments\Models\PaymentAttempt|string $attempt, int $
 ```text
 final class Nvl\Payments\Services\PaymentWebhooks
 public function __construct(Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Ownership\PaymentsProviderAdmission $ownership): mixed
-public function process(string $payload, string $signature): void
+public function process(#[SensitiveParameter()] string $payload, #[SensitiveParameter()] string $signature): void
 ```
 
 ## Nvl\Payments\Services\PaymentsModelRegistry

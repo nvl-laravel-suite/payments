@@ -38,7 +38,7 @@ final class PaymentReconciliation
     public function resolveException(PaymentAttempt|string $attempt, string $operationId, Authenticatable $actor): PaymentAttempt
     {
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::findAttemptOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'resolve_payment_exception', $order);
@@ -55,6 +55,9 @@ final class PaymentReconciliation
         $actorId = $actor->getAuthIdentifier();
         if ((! is_string($actorId) && ! is_int($actorId)) || trim((string) $actorId) === '') {
             throw new InvalidArgumentException('A stable actor identifier is required.');
+        }
+        if (! Str::isUuid($operationId)) {
+            throw new InvalidArgumentException('A valid operation UUID is required.');
         }
         $existing = PaymentOperation::query()->find($operationId);
         if ($existing !== null) {
@@ -94,7 +97,7 @@ final class PaymentReconciliation
     {
         $this->integrity->assertReady();
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::findAttemptOrFail($attemptId);
         $connection = $attempt->getConnection();
         if (! config()->boolean('nvl-payments.enabled')) {
             throw PaymentsException::because(PaymentsResponseCode::FeatureDisabled, 'Payments is disabled.');
@@ -178,7 +181,7 @@ final class PaymentReconciliation
                 throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Checkout recovery requires the original operation metadata.');
             }
         }
-        $attempt->fill(['stripe_checkout_session_id' => $checkout['sessionId'], 'stripe_account_id' => $checkout['accountId'], 'stripe_livemode' => $checkout['livemode'], 'expires_at' => $checkout['expiresAt'], 'last_synced_at' => now()]);
+        $attempt->fill(['stripe_checkout_session_id' => $checkout['sessionId'], 'stripe_account_id' => $checkout['accountId'], 'stripe_livemode' => $checkout['livemode'], 'expires_at' => $checkout['expiresAt']->setTimezone(date_default_timezone_get()), 'last_synced_at' => now()]);
         if ($checkout['url'] !== null) {
             $attempt->checkout_url = $checkout['url'];
         }

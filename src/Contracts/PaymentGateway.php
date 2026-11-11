@@ -10,6 +10,9 @@ use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 /**
  * Fakeable boundary for one-time Stripe order payments.
  *
+ * `refundedAmountMinor` counts refunds of captured money only. A released hold (a canceled or expired
+ * authorization, or the uncaptured remainder of a partial capture) is not a refund.
+ *
  * @api
  *
  * @phpstan-type HostedCheckout array{sessionId:string, url:string, expiresAt:\Carbon\CarbonImmutable}

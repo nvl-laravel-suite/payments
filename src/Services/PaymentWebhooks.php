@@ -29,8 +29,8 @@ final class PaymentWebhooks
     /** Inject the authoritative remote reader and reusable state boundary. */
     public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentsProviderAdmission $ownership) {}
 
-    /** Verify the signed raw payload, account and mode before processing. */
-    public function process(string $payload, string $signature): void
+    /** Verify the signed raw payload, account and mode before processing; neither argument enters an exception trace. */
+    public function process(#[\SensitiveParameter] string $payload, #[\SensitiveParameter] string $signature): void
     {
         $secret = Config::get('nvl-payments.stripe.webhook_secret');
         if (Config::get('nvl-payments.enabled') !== true || ! is_string($secret) || $secret === '') {

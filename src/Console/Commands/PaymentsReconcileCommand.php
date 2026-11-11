@@ -10,6 +10,7 @@ use Nvl\Payments\Contracts\PaymentOwnerWorklist;
 use Nvl\Payments\Services\PaymentReconciliation;
 use Nvl\Payments\Services\PaymentsModelRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipSystemRunner;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Throwable;
 
@@ -48,7 +49,15 @@ final class PaymentsReconcileCommand extends Command
                 if ($remaining === 0) {
                     break;
                 }
-                $counts = $runner->runSystem($owner, 'payments.reconcile', fn () => $this->reconcileWithinScope($reconcile, $target, $batch, $remaining));
+                try {
+                    $counts = $runner->runSystem($owner, 'payments.reconcile', fn () => $this->reconcileWithinScope($reconcile, $target, $batch, $remaining));
+                } catch (OwnershipViolation) {
+                    // A refused owner keeps its place at the head of the worklist; it must not stop the owners behind it.
+                    $failed++;
+                    $this->error('Reconciliation was refused for one payment owner.');
+
+                    continue;
+                }
                 $processed += $counts['processed'];
                 $failed += $counts['failed'];
                 $remaining -= $counts['visited'];

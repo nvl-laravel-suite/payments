@@ -19,6 +19,9 @@ use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
+use Stripe\Exception\AuthenticationException;
+use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\PermissionException;
 use Throwable;
 
 /**
@@ -101,7 +104,7 @@ final class PaymentCheckout
     public function recover(PaymentAttempt|string $attempt, string $stripeSessionId, Authenticatable $actor): PaymentAttempt
     {
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::findAttemptOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'recover_checkout', $order);
@@ -244,16 +247,31 @@ final class PaymentCheckout
             $attempt->getConnection()->transaction(function () use ($attempt, $operation, $checkout): void {
                 PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'reserved')->update([
                     'state' => 'open', 'stripe_checkout_session_id' => $checkout['sessionId'],
-                    'checkout_url' => $checkout['url'], 'expires_at' => $checkout['expiresAt'],
+                    // Eloquent stores wall-clock time; convert the provider's UTC instant to the application zone first.
+                    'checkout_url' => $checkout['url'], 'expires_at' => $checkout['expiresAt']->setTimezone(date_default_timezone_get()),
                 ]);
                 $this->journal->complete($operation, $checkout['sessionId']);
             }, 5);
 
             return $checkout;
         } catch (Throwable $exception) {
-            $this->journal->markUnknown($operation);
+            if ($this->rejectedBeforeCreation($exception)) {
+                $attempt->getConnection()->transaction(function () use ($attempt, $operation): void {
+                    PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'reserved')->update(['state' => 'failed', 'reservation_key' => null]);
+                    PaymentOperation::query()->whereKey($operation->id)->where('status', 'reserved')->update(['status' => 'failed', 'resolved_at' => now()]);
+                }, 5);
+            } else {
+                $this->journal->markUnknown($operation);
+            }
             throw $exception;
         }
+    }
+
+    /** A request Stripe refused outright created no Session; every other failure stays uncertain. */
+    private function rejectedBeforeCreation(Throwable $exception): bool
+    {
+        return ($exception instanceof InvalidRequestException || $exception instanceof AuthenticationException || $exception instanceof PermissionException)
+            && $exception->getStripeCode() !== 'idempotency_key_in_use';
     }
 
     /**

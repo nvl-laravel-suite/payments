@@ -42,7 +42,7 @@ final class PaymentRefunds
     public function refund(PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Authenticatable $actor): PaymentRefund
     {
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
-        $attempt = PaymentsModelRegistry::attemptQuery()->findOrFail($attemptId);
+        $attempt = PaymentsModelRegistry::findAttemptOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
         $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'refund', $order);
