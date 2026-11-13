@@ -140,6 +140,11 @@ final class PaymentReconciliation
                 if ($current->stripe_charge_id === null && $payment['chargeId'] !== null) {
                     $current->update(['stripe_charge_id' => $payment['chargeId']]);
                 }
+                $reversals = $payment['releasedHoldRefundIds'] ?? [];
+                if (array_intersect($reversals, array_column($refunds, 'refundId')) !== []) {
+                    throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Stripe refund facts disagree about a partial capture reversal.');
+                }
+                $this->removeImportedReversals($current, $reversals);
                 $this->applyRefunds($current, $refunds);
                 $this->syncer->reconcile($payment, $refunds);
             }
@@ -196,6 +201,30 @@ final class PaymentReconciliation
             }
         }
         $attempt->save();
+    }
+
+    /** Remove old reconciliation rows only for exact provider-confirmed reversals and retain their journal history.
+     * @param  list<string>  $refundIds
+     */
+    private function removeImportedReversals(PaymentAttempt $attempt, array $refundIds): void
+    {
+        if ($refundIds === []) {
+            return;
+        }
+
+        $imported = PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)
+            ->whereIn('stripe_refund_id', $refundIds)->orderBy('id')->lockForUpdate()->get();
+        foreach ($imported as $refund) {
+            $operation = PaymentOperation::query()->lockForUpdate()->findOrFail($refund->payment_operation_id);
+            if ($operation->payment_attempt_id !== $attempt->id || $operation->order_reference !== $attempt->order_reference
+                || $operation->type !== 'reconcile_refund' || $operation->actor_reference !== 'system:reconciliation'
+                || $operation->status !== 'completed' || $operation->stripe_result_reference !== $refund->stripe_refund_id) {
+                throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'A partial capture reversal conflicts with a local refund operation.');
+            }
+            if ($refund->delete() !== true) {
+                throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'An imported partial capture reversal could not be removed.');
+            }
+        }
     }
 
     /**

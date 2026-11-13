@@ -8,13 +8,14 @@ use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\Actor;
 use Nvl\Ownership\Tests\Fixtures\Company;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Ownership\PaymentsIntegrityGuard;
 use Nvl\Payments\Services\PaymentOperationJournal;
 use Nvl\Payments\Tests\OwnerScopeTestCase;
 use Nvl\Support\Ownership\Exceptions\OwnershipSchemaNotReady;
 
-uses(OwnerScopeTestCase::class);
+uses(OwnerScopeTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 
 it('rejects raw cross-owner operation links and provider key reassignment even for equal host order references', function (): void {
     $create = fn () => PaymentAttempt::query()->create(['order_reference' => 'equal-order', 'order_revision' => 'v1', 'amount_minor' => 1000, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'open']);
@@ -58,12 +59,10 @@ it('denies financial effects without complete live provider correlation uniquene
         $schema->table($model->getTable(), fn (Blueprint $table) => $table->dropUnique($name));
         if ($incomplete) {
             $grammar = $model->getConnection()->getQueryGrammar();
-            $coverage = in_array($model->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
-                ? '('.$grammar->wrap('stripe_payment_intent_id').'(8))'
-                : '('.$grammar->wrap('stripe_payment_intent_id').') WHERE 1 = 0';
+            $coverage = '('.$grammar->wrap('stripe_payment_intent_id').') WHERE 1 = 0';
             $model->getConnection()->statement('CREATE UNIQUE INDEX '.$grammar->wrap($name).' ON '.$grammar->wrapTable($model->getTable()).' '.$coverage);
         }
         expect(fn () => app(PaymentsIntegrityGuard::class)->assertReady())
             ->toThrow(OwnershipSchemaNotReady::class);
     });
-})->with(['missing' => false, 'incomplete' => true]);
+})->group('fresh-adoption')->with(['missing' => false, 'incomplete' => true]);

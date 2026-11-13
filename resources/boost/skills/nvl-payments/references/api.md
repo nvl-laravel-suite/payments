@@ -38,7 +38,7 @@ Search for the relevant fully qualified service or contract and read only its ma
 interface Nvl\Payments\Contracts\ExistingPaymentOwnership
 public abstract function assertOwned(Nvl\Payments\ValueObjects\OrderPaymentSnapshot $order, array $payment): void
 @param StripePaymentState $payment
-resolved @param array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string} $payment
+resolved @param array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string} $payment
 ```
 
 ## Nvl\Payments\Contracts\PaymentGateway
@@ -47,10 +47,10 @@ resolved @param array{paymentIntentId: ?string, chargeId: ?string, accountId: st
 interface Nvl\Payments\Contracts\PaymentGateway
 public abstract function cancel(string $paymentIntentId, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public abstract function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public abstract function checkout(string $sessionId): array
 @return StripeCheckoutState
 resolved @return array{sessionId: string, paymentIntentId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, paymentStatus: string, orderReference: ?string, orderRevision: ?string, expiresAt: Carbon\CarbonImmutable, operationKey: ?string, url: ?string}
@@ -60,7 +60,7 @@ resolved @return array{sessionId: string, url: string, expiresAt: Carbon\CarbonI
 public abstract function expireCheckout(string $sessionId, string $idempotencyKey): void
 public abstract function payment(string $paymentReference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public abstract function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
 @return StripeRefundState
 resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}
@@ -69,7 +69,7 @@ public abstract function refunds(string $paymentId): array
 resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}>
 public abstract function resolveExisting(string $reference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 ```
 
 ## Nvl\Payments\Contracts\PaymentManagementAccess
@@ -463,10 +463,10 @@ public function calls(?string $method=null): array
 resolved @return list<Nvl\Support\Testing\FakeCall>
 public function cancel(string $paymentIntentId, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public function checkout(string $sessionId): array
 @return StripeCheckoutState
 resolved @return array{sessionId: string, paymentIntentId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, paymentStatus: string, orderReference: ?string, orderRevision: ?string, expiresAt: Carbon\CarbonImmutable, operationKey: ?string, url: ?string}
@@ -477,7 +477,7 @@ public function expireCheckout(string $sessionId, string $idempotencyKey): void
 public static function fake(Illuminate\Contracts\Container\Container $container): self
 public function payment(string $paymentReference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
 @return StripeRefundState
 resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}
@@ -486,7 +486,7 @@ public function refunds(string $paymentId): array
 resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}>
 public function resolveExisting(string $reference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
 public function willReturn(string $method, mixed $value): static
 public function willThrow(string $method, Throwable $exception): static
 ```

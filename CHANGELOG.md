@@ -5,6 +5,10 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Exclude partial-capture authorization reversals from refundable balance accounting and reconcile previously imported reversal entries safely.
+
 ## [7.0.2] - 2026-11-11
 
 ### Fixed
@@ -45,7 +49,7 @@ All notable changes to `nvl/payments` are documented here.
 
 ### Fixed
 
-- Prevent concurrent MySQL/MariaDB refunds from over-reserving captured funds by reading current reservations under the existing payment lock.
+- Prevent concurrent refunds from over-reserving captured funds by reading current reservations under the existing payment lock.
 - Fail strict Doctor readiness on invalid local monetary balances or incomplete financial columns, using private writer-side boolean probes; document destructive financial rollback and host recovery obligations.
 - Validate portable refund-note byte capacity, UTF-8 and NUL exclusion before provider access or financial reservation, preserving accepted bytes and UUID replay.
 

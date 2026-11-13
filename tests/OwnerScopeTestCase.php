@@ -49,10 +49,12 @@ abstract class OwnerScopeTestCase extends OwnershipTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        foreach (glob(__DIR__.'/../database/migrations/payments/*.php') ?: [] as $path) {
-            (require $path)->up();
+        if (! $this->hasRetainedOwnershipSchema()) {
+            foreach (glob(__DIR__.'/../database/migrations/payments/*.php') ?: [] as $path) {
+                (require $path)->up();
+            }
+            (require __DIR__.'/../../ownership/database/migrations/ownership/2026_10_18_000001_nvl_ownership_create_adoption_tables.php')->up();
         }
-        (require __DIR__.'/../../ownership/database/migrations/ownership/2026_10_18_000001_nvl_ownership_create_adoption_tables.php')->up();
         $this->app->bind(OwnershipAdoptionAccess::class, static fn () => new class implements OwnershipAdoptionAccess
         {
             public function authorize(OwnershipOperation $operation): void {}
@@ -81,6 +83,15 @@ abstract class OwnerScopeTestCase extends OwnershipTestCase
                 return [];
             }
         });
+        if (! $this->hasRetainedOwnershipSchema()) {
+            $this->adoptSchema();
+        }
+        $this->app->make(MaintenanceMode::class)->deactivate();
+        $this->allowOwners();
+    }
+
+    private function adoptSchema(): void
+    {
         $coordinator = $this->app->make(OwnershipAdoptionCoordinator::class);
         $operation = new OwnershipOperation('payments-adopt', 'operator', '1');
         $plan = $coordinator->prepare(['payments'], $this->adoptionMappings(), $operation);
@@ -88,8 +99,6 @@ abstract class OwnerScopeTestCase extends OwnershipTestCase
         }
         $this->adoptionPlan = $plan;
         $this->activatePreparedPlan($coordinator, $plan, $operation);
-        $this->app->make(MaintenanceMode::class)->deactivate();
-        $this->allowOwners();
     }
 
     /** Supply explicit reviewed pre-adoption records for nonempty cutover fixtures.

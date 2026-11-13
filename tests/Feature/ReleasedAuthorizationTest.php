@@ -7,10 +7,14 @@ use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
+use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\PaymentAuthorizations;
+use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Services\PaymentReconciliation;
+use Nvl\Payments\Services\PaymentRefunds;
 use Nvl\Payments\Services\StripePaymentGateway;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
@@ -23,17 +27,28 @@ require_once __DIR__.'/../PaymentsTestCase.php';
 uses(PaymentsSchemaTestCase::class);
 
 /**
- * Stripe reports a released authorization on the Charge as refunded: `amount_refunded` grows by the
- * uncaptured amount when an authorization is canceled, expires or is only partially captured.
+ * Sanitized sandbox snapshots for a card authorized for 12.00 EUR.
  *
- * @param  array<string, mixed>  $intent
- * @param  array<string, mixed>  $charge
  * @return array<string, mixed>
  */
-function releasedAuthorizationIntent(array $intent = [], array $charge = []): array
+function releasedAuthorizationFixtures(): array
 {
-    return array_replace(['id' => 'pi_hold', 'object' => 'payment_intent', 'livemode' => false, 'amount' => 1200, 'amount_received' => 0, 'amount_capturable' => 1200, 'currency' => 'eur', 'status' => 'requires_capture', 'capture_method' => 'manual',
-        'latest_charge' => array_replace(['id' => 'ch_hold', 'object' => 'charge', 'livemode' => false, 'amount' => 1200, 'amount_captured' => 0, 'amount_refunded' => 0, 'currency' => 'eur', 'status' => 'succeeded', 'captured' => false, 'refunded' => false, 'payment_intent' => 'pi_hold', 'payment_method_details' => ['type' => 'card', 'card' => []]], $charge)], $intent);
+    return json_decode((string) file_get_contents(__DIR__.'/../Fixtures/stripe-released-authorization.json'), true, flags: JSON_THROW_ON_ERROR);
+}
+
+/** @return array<string, mixed> */
+function releasedAuthorizationIntent(string $scenario = 'authorized'): array
+{
+    return releasedAuthorizationFixtures()['payment_intents'][$scenario];
+}
+
+/** Put the legacy reversal on a later page so both requests must expand its balance transaction. */
+function releasedAuthorizationRefundPages(bool $legacy): array
+{
+    [$genuine, $reversal] = releasedAuthorizationFixtures()['refunds'];
+    $page = ['object' => 'list', 'url' => '/v1/refunds', 'data' => [$genuine], 'has_more' => $legacy];
+
+    return $legacy ? [$page, array_replace($page, ['data' => [$reversal], 'has_more' => false])] : [$page];
 }
 
 beforeEach(function (): void {
@@ -41,8 +56,11 @@ beforeEach(function (): void {
     {
         public array $responses = [];
 
+        public array $requests = [];
+
         public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null): array
         {
+            $this->requests[] = $params;
             if (str_ends_with($absUrl, '/v1/account')) {
                 return [json_encode(['id' => 'acct_expected', 'object' => 'account']), 200, []];
             }
@@ -68,8 +86,8 @@ afterEach(function (): void {
     ApiRequestor::setHttpClient(new CurlClient);
 });
 
-it('cancels an authorization whose released hold Stripe reports as a refunded charge', function (): void {
-    $canceled = releasedAuthorizationIntent(['status' => 'canceled', 'amount_capturable' => 0], ['amount_refunded' => 1200, 'refunded' => true]);
+it('cancels an authorization without creating a refund', function (): void {
+    $canceled = releasedAuthorizationIntent('canceled');
     $this->transport->responses = [releasedAuthorizationIntent(), releasedAuthorizationIntent(), $canceled];
 
     $attempt = app(PaymentAuthorizations::class)->cancel($this->attempt, (string) Str::uuid(), $this->actor);
@@ -80,27 +98,117 @@ it('cancels an authorization whose released hold Stripe reports as a refunded ch
 });
 
 it('reconciles an authorization that expired uncaptured instead of rejecting its released hold', function (): void {
-    $this->transport->responses = [releasedAuthorizationIntent(['status' => 'canceled', 'amount_capturable' => 0], ['amount_refunded' => 1200, 'refunded' => true])];
+    $expired = array_replace(releasedAuthorizationIntent('canceled'), ['cancellation_reason' => 'expired']);
+    $this->transport->responses = [$expired];
 
     $attempt = app(PaymentReconciliation::class)->reconcile($this->attempt);
 
     expect($attempt->state)->toBe('canceled')->and($attempt->reservation_key)->toBeNull()->and($attempt->refunded_amount_minor)->toBe(0);
 });
 
-it('captures less than half of an authorization without counting the released remainder as a refund', function (): void {
-    $captured = releasedAuthorizationIntent(['status' => 'succeeded', 'amount_received' => 500, 'amount_capturable' => 0], ['amount_captured' => 500, 'amount_refunded' => 700, 'captured' => true]);
+it('partially captures an authorization without counting the released remainder as a refund', function (int $amount): void {
+    $captured = releasedAuthorizationIntent('capture'.$amount);
     $this->transport->responses = [releasedAuthorizationIntent(), releasedAuthorizationIntent(), $captured];
 
-    $attempt = app(PaymentAuthorizations::class)->capture($this->attempt, 500, (string) Str::uuid(), $this->actor);
+    $attempt = app(PaymentAuthorizations::class)->capture($this->attempt, $amount, (string) Str::uuid(), $this->actor);
 
-    expect($attempt->state)->toBe('captured')->and($attempt->captured_amount_minor)->toBe(500)->and($attempt->refunded_amount_minor)->toBe(0)
+    expect($attempt->state)->toBe('captured')->and($attempt->captured_amount_minor)->toBe($amount)->and($attempt->refunded_amount_minor)->toBe(0)
         ->and(PaymentOperation::sole()->status)->toBe('completed');
-});
+})->with([700, 400]);
 
-it('still reports money refunded after a partial capture', function (): void {
-    $this->transport->responses = [releasedAuthorizationIntent(['status' => 'succeeded', 'amount_received' => 500, 'amount_capturable' => 0], ['amount_captured' => 500, 'amount_refunded' => 900, 'captured' => true])];
+it('reports captured-money refunds after a partial capture', function (bool $legacy): void {
+    $captured = releasedAuthorizationIntent($legacy ? 'legacy_refunded' : 'refunded');
+    $pages = releasedAuthorizationRefundPages($legacy);
+    $this->transport->responses = [$captured, ...$pages, $captured, ...$pages];
+    $gateway = app(PaymentGateway::class);
+    $state = $gateway->payment('pi_hold');
+
+    expect($state['capturedAmountMinor'])->toBe(400)->and($state['refundedAmountMinor'])->toBe(200)
+        ->and(array_column($gateway->refunds('pi_hold'), 'refundId'))->toBe(['re_actual']);
+    if ($legacy) {
+        expect(end($this->transport->requests))->toMatchArray(['starting_after' => 're_actual', 'expand' => ['data.balance_transaction']]);
+    }
+})->with(['current capture' => [false], 'legacy capture read using the current API' => [true]]);
+
+it('reconciles a historical reversal without deleting a requested refund', function (bool $imported): void {
+    $this->attempt->update(['state' => 'partially_refunded', 'captured_amount_minor' => 400, 'refunded_amount_minor' => 200]);
+    $operation = PaymentOperation::factory()->forAttempt($this->attempt)->create([
+        'type' => $imported ? 'reconcile_refund' : 'refund', 'status' => 'completed',
+        'actor_reference' => $imported ? 'system:reconciliation' : 'admin', 'stripe_result_reference' => 're_release',
+    ]);
+    $oldRefund = PaymentRefund::query()->create([
+        'payment_attempt_id' => $this->attempt->id, 'payment_operation_id' => $operation->id,
+        'stripe_refund_id' => 're_release', 'amount_minor' => 800, 'currency' => 'EUR', 'status' => 'succeeded',
+    ]);
+    $captured = releasedAuthorizationIntent('legacy_refunded');
+    $pages = releasedAuthorizationRefundPages(true);
+    $read = [$captured, ...$pages, $captured, ...$pages];
+    $this->transport->responses = [...$read, ...$read];
+
+    if (! $imported) {
+        expect(fn () => app(PaymentReconciliation::class)->reconcile($this->attempt))
+            ->toThrow(PaymentsException::class, 'A partial capture reversal conflicts with a local refund operation.');
+        expect($oldRefund->fresh())->not->toBeNull()->and(PaymentRefund::query()->count())->toBe(1);
+
+        return;
+    }
+
+    app(PaymentReconciliation::class)->reconcile($this->attempt);
+    app(PaymentReconciliation::class)->reconcile($this->attempt);
+
+    $projection = app(PaymentReadService::class)->forOrder($this->attempt->order_reference, $this->actor);
+    expect($oldRefund->fresh())->toBeNull()
+        ->and($operation->refresh()->stripe_result_reference)->toBe('re_release')
+        ->and(PaymentRefund::query()->sole()->stripe_refund_id)->toBe('re_actual')
+        ->and($projection['payments'][0]['refundedAmountMinor'])->toBe(200)
+        ->and($projection['payments'][0]['refundableAmountMinor'])->toBe(200);
+})->with(['previous reconciliation import' => [true], 'requested refund' => [false]]);
+
+it('refunds remaining captured money before reconciliation removes an imported partial-capture reversal', function (bool $imported): void {
+    $this->attempt->update(['state' => 'partially_refunded', 'captured_amount_minor' => 400, 'refunded_amount_minor' => 200]);
+    $operation = PaymentOperation::factory()->forAttempt($this->attempt)->create([
+        'type' => $imported ? 'reconcile_refund' : 'refund', 'status' => 'completed',
+        'actor_reference' => $imported ? 'system:reconciliation' : 'admin', 'stripe_result_reference' => 're_release',
+    ]);
+    $oldRefund = PaymentRefund::query()->create([
+        'payment_attempt_id' => $this->attempt->id, 'payment_operation_id' => $operation->id,
+        'stripe_refund_id' => 're_release', 'amount_minor' => 800, 'currency' => 'EUR', 'status' => 'succeeded',
+    ]);
+    $captured = releasedAuthorizationIntent('legacy_refunded');
+    $pages = releasedAuthorizationRefundPages(true);
+    $createdRefund = ['id' => 're_followup', 'object' => 'refund', 'amount' => 200, 'currency' => 'eur', 'reason' => 'requested_by_customer', 'status' => 'succeeded', 'payment_intent' => 'pi_hold', 'charge' => 'ch_hold'];
+    $this->transport->responses = [$captured, ...$pages, $captured, ...$pages, $captured, ...$pages, $createdRefund];
+
+    if (! $imported) {
+        expect(fn () => app(PaymentRefunds::class)->refund($this->attempt, 200, 'requested_by_customer', null, (string) Str::uuid(), $this->actor))
+            ->toThrow(PaymentsException::class, 'A partial capture reversal conflicts with a local refund operation.');
+        expect($oldRefund->fresh())->not->toBeNull();
+
+        return;
+    }
+
+    $refund = app(PaymentRefunds::class)->refund($this->attempt, 200, 'requested_by_customer', null, (string) Str::uuid(), $this->actor);
+
+    expect($refund->stripe_refund_id)->toBe('re_followup')
+        ->and($refund->status)->toBe('succeeded')
+        ->and($oldRefund->fresh())->toBeNull();
+})->with(['previous reconciliation import' => [true], 'requested refund' => [false]]);
+
+it('ignores legacy full-reversal amount_refunded on uncaptured canceled charges and canceled reversal objects', function (): void {
+    $preBasilCanceled = releasedAuthorizationIntent('canceled');
+    $preBasilCanceled['latest_charge']['amount_refunded'] = 1200;
+    $preBasilCanceled['latest_charge']['refunded'] = true;
+    $this->transport->responses = [$preBasilCanceled];
+
+    $attempt = app(PaymentReconciliation::class)->reconcile($this->attempt);
+    expect($attempt->state)->toBe('canceled')->and($attempt->refunded_amount_minor)->toBe(0);
+
+    [$genuine, $reversal] = releasedAuthorizationFixtures()['refunds'];
+    $canceledReversal = array_replace($reversal, ['status' => 'canceled']);
+    $captured = releasedAuthorizationIntent('refunded');
+    $page = ['object' => 'list', 'url' => '/v1/refunds', 'data' => [$genuine, $canceledReversal], 'has_more' => false];
+    $this->transport->responses = [$captured, $page];
 
     $state = app(PaymentGateway::class)->payment('pi_hold');
-
-    expect($state['capturedAmountMinor'])->toBe(500)->and($state['refundedAmountMinor'])->toBe(200);
+    expect($state['refundedAmountMinor'])->toBe(200)->and($state['releasedHoldRefundIds'])->toBe(['re_release']);
 });

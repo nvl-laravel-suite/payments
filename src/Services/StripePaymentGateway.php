@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
+use Stripe\BalanceTransaction;
 use Stripe\Charge;
 use Stripe\PaymentIntent;
 use Stripe\Refund;
@@ -89,18 +90,12 @@ final class StripePaymentGateway implements PaymentGateway
      */
     public function payment(string $paymentReference): array
     {
-        $field = $this->paymentField($paymentReference);
-        $this->verifyAccount();
-        if ($field === 'payment_intent') {
-            return $this->intentState($this->client->paymentIntents->retrieve($paymentReference, ['expand' => ['latest_charge']]));
-        }
-        $charge = $this->client->charges->retrieve($paymentReference);
-        $this->verifyMode($charge);
-        if ($charge->payment_intent !== null) {
-            return $this->payment($this->reference($charge->payment_intent) ?? throw new UnexpectedValueException('Missing PaymentIntent ID.'));
+        $payment = $this->retrievePayment($paymentReference);
+        if ($payment instanceof PaymentIntent) {
+            return $this->intentState($payment);
         }
 
-        return ['paymentIntentId' => null, 'chargeId' => $charge->id, 'accountId' => $this->accountId, 'livemode' => $charge->livemode, 'amountMinor' => $charge->amount, 'capturedAmountMinor' => $charge->amount_captured, 'refundedAmountMinor' => $this->refundedCapturedAmount($charge), 'currency' => $charge->currency, 'status' => $charge->captured ? $charge->status : ($charge->status === 'succeeded' ? 'requires_capture' : $charge->status), 'captureMethod' => $charge->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
+        return ['paymentIntentId' => null, 'chargeId' => $payment->id, 'accountId' => $this->accountId, 'livemode' => $payment->livemode, 'amountMinor' => $payment->amount, 'capturedAmountMinor' => $payment->amount_captured, ...$this->capturedRefundFacts($payment), 'currency' => $payment->currency, 'status' => $payment->captured ? $payment->status : ($payment->status === 'succeeded' ? 'requires_capture' : $payment->status), 'captureMethod' => $payment->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
     }
 
     /**
@@ -131,7 +126,7 @@ final class StripePaymentGateway implements PaymentGateway
         $this->requireIntent($paymentIntentId);
         $this->payment($paymentIntentId);
 
-        return $this->intentState($this->client->paymentIntents->capture($paymentIntentId, ['amount_to_capture' => $amountMinor, 'final_capture' => true, 'expand' => ['latest_charge']], $options));
+        return $this->intentState($this->client->paymentIntents->capture($paymentIntentId, ['amount_to_capture' => $amountMinor, 'expand' => ['latest_charge']], $options));
     }
 
     /**
@@ -167,14 +162,41 @@ final class StripePaymentGateway implements PaymentGateway
      */
     public function refunds(string $paymentId): array
     {
-        $this->paymentField($paymentId);
-        $payment = $this->payment($paymentId);
+        $payment = $this->retrievePayment($paymentId);
+        $charge = $payment instanceof PaymentIntent ? $this->latestCharge($payment) : $payment;
+        $capturedAmount = $payment instanceof PaymentIntent ? $payment->amount_received : $payment->amount_captured;
+        if ($capturedAmount === 0) {
+            return [];
+        }
+        $partial = $charge !== null && $charge->amount_captured < $charge->amount;
         $states = [];
-        foreach ($this->client->refunds->all(array_merge($this->paymentFilter($paymentId), ['limit' => 100]))->autoPagingIterator() as $refund) {
-            $states[] = $this->refundState($refund, $payment['livemode']);
+        foreach ($this->providerRefunds($paymentId, $partial) as $refund) {
+            if (! $partial || ! $this->isPartialCaptureReversal($refund)) {
+                $states[] = $this->refundState($refund, $payment->livemode);
+            }
         }
 
         return $states;
+    }
+
+    /** Read provider objects and check mode before deriving payment or refund facts. */
+    private function retrievePayment(string $paymentReference): PaymentIntent|Charge
+    {
+        $field = $this->paymentField($paymentReference);
+        $this->verifyAccount();
+        if ($field === 'payment_intent') {
+            $intent = $this->client->paymentIntents->retrieve($paymentReference, ['expand' => ['latest_charge']]);
+            $this->verifyMode($intent);
+
+            return $intent;
+        }
+        $charge = $this->client->charges->retrieve($paymentReference);
+        $this->verifyMode($charge);
+        if ($charge->payment_intent !== null) {
+            return $this->retrievePayment($this->reference($charge->payment_intent) ?? throw new UnexpectedValueException('Missing PaymentIntent ID.'));
+        }
+
+        return $charge;
     }
 
     /** Verify the actual account belonging to the injected credential. */
@@ -198,13 +220,7 @@ final class StripePaymentGateway implements PaymentGateway
     private function intentState(PaymentIntent $intent): array
     {
         $this->verifyMode($intent);
-        $charge = $intent->latest_charge;
-        if (is_string($charge)) {
-            $charge = $this->client->charges->retrieve($charge);
-        }
-        if ($charge instanceof Charge) {
-            $this->verifyMode($charge);
-        }
+        $charge = $this->latestCharge($intent);
 
         $capturable = $intent['amount_capturable'];
         $details = $charge instanceof Charge ? $charge['payment_method_details'] : null;
@@ -213,16 +229,70 @@ final class StripePaymentGateway implements PaymentGateway
         $partialAuthorization = $card instanceof StripeObject ? $card['partial_authorization'] : null;
         $partialStatus = $partialAuthorization instanceof StripeObject ? $partialAuthorization['status'] : null;
 
-        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, 'refundedAmountMinor' => $charge instanceof Charge ? $this->refundedCapturedAmount($charge) : 0, 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null];
+        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, ...($charge === null ? ['refundedAmountMinor' => 0] : $this->capturedRefundFacts($charge)), 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null];
     }
 
-    /**
-     * Stripe also counts a released hold as refunded: canceling, expiring or partially capturing an
-     * authorization adds the uncaptured amount to the charge's refunded total. Report captured money only.
-     */
-    private function refundedCapturedAmount(Charge $charge): int
+    /** Return the Charge after checking that it belongs to the configured Stripe mode. */
+    private function latestCharge(PaymentIntent $intent): ?Charge
     {
-        return max(0, $charge->amount_refunded - ($charge->amount - $charge->amount_captured));
+        $charge = $intent->latest_charge;
+        if (is_string($charge)) {
+            $charge = $this->client->charges->retrieve($charge);
+        }
+        if ($charge !== null) {
+            $this->verifyMode($charge);
+        }
+
+        return $charge;
+    }
+
+    /** Count genuine refunds and identify reversals recorded by older capture requests.
+     * @return array{refundedAmountMinor: int, releasedHoldRefundIds?: list<string>}
+     */
+    private function capturedRefundFacts(Charge $charge): array
+    {
+        if ($charge->amount_captured === 0) {
+            return ['refundedAmountMinor' => 0];
+        }
+        $refunded = $charge->amount_refunded;
+        $reversals = [];
+        if ($refunded > 0 && $charge->amount_captured < $charge->amount) {
+            foreach ($this->providerRefunds($charge->id, true) as $refund) {
+                if ($this->isPartialCaptureReversal($refund)) {
+                    if ($this->reference($refund->charge) !== $charge->id || isset($reversals[$refund->id])) {
+                        throw new UnexpectedValueException('Stripe returned an unrelated or duplicate partial capture reversal.');
+                    }
+                    if (! in_array($refund->status, ['failed', 'canceled'], true)) {
+                        $refunded -= $refund->amount;
+                    }
+                    $reversals[$refund->id] = $refund->id;
+                }
+            }
+        }
+
+        return ['refundedAmountMinor' => max(0, $refunded)] + ($reversals === [] ? [] : ['releasedHoldRefundIds' => array_values($reversals)]);
+    }
+
+    /** @return iterable<Refund> */
+    private function providerRefunds(string $paymentId, bool $expandBalanceTransaction): iterable
+    {
+        $parameters = $this->paymentFilter($paymentId) + ['limit' => 100];
+        if ($expandBalanceTransaction) {
+            $parameters['expand'] = ['data.balance_transaction'];
+        }
+
+        return $this->client->refunds->all($parameters)->autoPagingIterator();
+    }
+
+    /** Identify the accounting reversal without inferring its purpose from the amount. */
+    private function isPartialCaptureReversal(Refund $refund): bool
+    {
+        $transaction = $refund->balance_transaction;
+        if (is_string($transaction)) {
+            $transaction = $this->client->balanceTransactions->retrieve($transaction);
+        }
+
+        return $transaction instanceof BalanceTransaction && $transaction->reporting_category === 'partial_capture_reversal';
     }
 
     /**

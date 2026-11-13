@@ -57,16 +57,21 @@ it('publishes config, migrations, and agent skills from the package provider', f
 });
 
 it('loads opted-in vendor migrations while payment routes remain disabled', function (): void {
+    $migrations = dirname(__DIR__, 2).'/database/migrations/payments';
     config()->set('nvl-payments.enabled', false);
     config()->set('nvl-payments.migrations.enabled', true);
 
     (new PaymentsServiceProvider(app()))->boot();
 
-    $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
+    try {
+        $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
 
-    expect(array_map(realpath(...), app('migrator')->paths()))->toContain(realpath(dirname(__DIR__, 2).'/database/migrations/payments'))
-        ->and(Schema::hasTable(PaymentsTables::Attempts))->toBeTrue()
-        ->and(Route::getRoutes()->getByName('nvl.payments.webhook'))->toBeNull();
+        expect(array_map(realpath(...), app('migrator')->paths()))->toContain(realpath($migrations))
+            ->and(Schema::hasTable(PaymentsTables::Attempts))->toBeTrue()
+            ->and(Route::getRoutes()->getByName('nvl.payments.webhook'))->toBeNull();
+    } finally {
+        $this->artisan('migrate:rollback', ['--force' => true, '--path' => [$migrations], '--realpath' => true])->assertExitCode(0);
+    }
 });
 
 it('resolves the default gateway from Payments credentials account and mode', function (): void {

@@ -7,6 +7,7 @@ namespace Nvl\Payments\Services;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 
 /**
@@ -30,6 +31,10 @@ final class RefundBalance
         if ($payment['status'] !== 'succeeded' || $payment['capturedAmountMinor'] <= 0) {
             throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Only a confirmed captured payment is refundable.');
         }
+        $reversals = $payment['releasedHoldRefundIds'] ?? [];
+        if (array_intersect($reversals, array_column($refunds, 'refundId')) !== []) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Stripe refund facts disagree about a partial capture reversal.');
+        }
         $remote = [];
         $remoteReserved = 0;
         foreach ($refunds as $refund) {
@@ -44,6 +49,19 @@ final class RefundBalance
         }
         $localReserved = 0;
         foreach (PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)->orderBy('id')->lockForUpdate()->get() as $local) {
+            if ($local->stripe_refund_id !== null && in_array($local->stripe_refund_id, $reversals, true)) {
+                $operation = PaymentOperation::query()->lockForUpdate()->findOrFail($local->payment_operation_id);
+                if ($operation->payment_attempt_id !== $attempt->id || $operation->order_reference !== $attempt->order_reference
+                    || $operation->type !== 'reconcile_refund' || $operation->actor_reference !== 'system:reconciliation'
+                    || $operation->status !== 'completed' || $operation->stripe_result_reference !== $local->stripe_refund_id) {
+                    throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'A partial capture reversal conflicts with a local refund operation.');
+                }
+                if ($local->delete() !== true) {
+                    throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'An imported partial capture reversal could not be removed.');
+                }
+
+                continue;
+            }
             $known = $local->stripe_refund_id === null ? null : ($remote[$local->stripe_refund_id] ?? null);
             if ($known !== null) {
                 $this->assertMatches($attempt, $known, $local);

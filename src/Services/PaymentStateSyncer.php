@@ -48,12 +48,16 @@ final class PaymentStateSyncer
     {
         $this->integrity->assertReady();
         $succeeded = 0;
+        $active = 0;
         foreach ($refunds as $refund) {
             if ($refund['status'] === 'succeeded') {
                 $succeeded += $refund['amountMinor'];
             }
+            if (! in_array($refund['status'], ['failed', 'canceled'], true)) {
+                $active += $refund['amountMinor'];
+            }
         }
-        $this->apply($payment, $succeeded === $payment['refundedAmountMinor']);
+        $this->apply($payment, in_array($payment['refundedAmountMinor'], [$succeeded, $active], true));
     }
 
     /**

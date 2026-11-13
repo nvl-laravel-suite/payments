@@ -238,7 +238,26 @@ final class FakePaymentGateway implements PaymentGateway
             throw new TypeError('FakePaymentGateway requires complete, correctly typed StripePaymentState facts.');
         }
 
+        $this->validateReleasedHoldRefundIds($result);
+
         return $result;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     *
+     * @phpstan-assert array{releasedHoldRefundIds?: list<string>, ...} $state
+     */
+    private function validateReleasedHoldRefundIds(array $state): void
+    {
+        if (! array_key_exists('releasedHoldRefundIds', $state)) {
+            return;
+        }
+
+        $ids = $state['releasedHoldRefundIds'];
+        if (! is_array($ids) || array_values(array_filter($ids, is_string(...))) !== $ids) {
+            throw new TypeError('FakePaymentGateway requires released hold refund IDs as a list of strings.');
+        }
     }
 
     /** @return StripeRefundState */

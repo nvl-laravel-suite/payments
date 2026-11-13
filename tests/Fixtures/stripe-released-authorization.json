@@ -1,0 +1,414 @@
+{
+    "payment_intents": {
+        "authorized": {
+            "id": "pi_hold",
+            "object": "payment_intent",
+            "amount": 1200,
+            "amount_capturable": 1200,
+            "amount_received": 0,
+            "cancellation_reason": null,
+            "capture_method": "manual",
+            "currency": "eur",
+            "livemode": false,
+            "status": "requires_capture",
+            "latest_charge": {
+                "id": "ch_hold",
+                "object": "charge",
+                "amount": 1200,
+                "amount_captured": 0,
+                "amount_refunded": 0,
+                "captured": false,
+                "currency": "eur",
+                "livemode": false,
+                "refunded": false,
+                "status": "succeeded",
+                "payment_intent": "pi_hold",
+                "payment_method_details": {
+                    "type": "card"
+                }
+            }
+        },
+        "canceled": {
+            "id": "pi_hold",
+            "object": "payment_intent",
+            "amount": 1200,
+            "amount_capturable": 0,
+            "amount_received": 0,
+            "cancellation_reason": null,
+            "capture_method": "manual",
+            "currency": "eur",
+            "livemode": false,
+            "status": "canceled",
+            "latest_charge": {
+                "id": "ch_hold",
+                "object": "charge",
+                "amount": 1200,
+                "amount_captured": 0,
+                "amount_refunded": 0,
+                "captured": false,
+                "currency": "eur",
+                "livemode": false,
+                "refunded": false,
+                "status": "succeeded",
+                "payment_intent": "pi_hold",
+                "payment_method_details": {
+                    "type": "card"
+                }
+            }
+        },
+        "capture700": {
+            "id": "pi_hold",
+            "object": "payment_intent",
+            "amount": 1200,
+            "amount_capturable": 0,
+            "amount_received": 700,
+            "cancellation_reason": null,
+            "capture_method": "manual",
+            "currency": "eur",
+            "livemode": false,
+            "status": "succeeded",
+            "latest_charge": {
+                "id": "ch_hold",
+                "object": "charge",
+                "amount": 1200,
+                "amount_captured": 700,
+                "amount_refunded": 0,
+                "captured": true,
+                "currency": "eur",
+                "livemode": false,
+                "refunded": false,
+                "status": "succeeded",
+                "payment_intent": "pi_hold",
+                "payment_method_details": {
+                    "type": "card"
+                }
+            }
+        },
+        "capture400": {
+            "id": "pi_hold",
+            "object": "payment_intent",
+            "amount": 1200,
+            "amount_capturable": 0,
+            "amount_received": 400,
+            "cancellation_reason": null,
+            "capture_method": "manual",
+            "currency": "eur",
+            "livemode": false,
+            "status": "succeeded",
+            "latest_charge": {
+                "id": "ch_hold",
+                "object": "charge",
+                "amount": 1200,
+                "amount_captured": 400,
+                "amount_refunded": 0,
+                "captured": true,
+                "currency": "eur",
+                "livemode": false,
+                "refunded": false,
+                "status": "succeeded",
+                "payment_intent": "pi_hold",
+                "payment_method_details": {
+                    "type": "card"
+                }
+            }
+        },
+        "refunded": {
+            "id": "pi_hold",
+            "object": "payment_intent",
+            "amount": 1200,
+            "amount_capturable": 0,
+            "amount_received": 400,
+            "cancellation_reason": null,
+            "capture_method": "manual",
+            "currency": "eur",
+            "livemode": false,
+            "status": "succeeded",
+            "latest_charge": {
+                "id": "ch_hold",
+                "object": "charge",
+                "amount": 1200,
+                "amount_captured": 400,
+                "amount_refunded": 200,
+                "captured": true,
+                "currency": "eur",
+                "livemode": false,
+                "refunded": false,
+                "status": "succeeded",
+                "payment_intent": "pi_hold",
+                "payment_method_details": {
+                    "type": "card"
+                }
+            }
+        },
+        "legacy_refunded": {
+            "id": "pi_hold",
+            "object": "payment_intent",
+            "amount": 1200,
+            "amount_capturable": 0,
+            "amount_received": 400,
+            "cancellation_reason": null,
+            "capture_method": "manual",
+            "currency": "eur",
+            "livemode": false,
+            "status": "succeeded",
+            "latest_charge": {
+                "id": "ch_hold",
+                "object": "charge",
+                "amount": 1200,
+                "amount_captured": 400,
+                "amount_refunded": 1000,
+                "captured": true,
+                "currency": "eur",
+                "livemode": false,
+                "refunded": false,
+                "status": "succeeded",
+                "payment_intent": "pi_hold",
+                "payment_method_details": {
+                    "type": "card"
+                }
+            }
+        }
+    },
+    "refunds": [
+        {
+            "id": "re_actual",
+            "object": "refund",
+            "amount": 200,
+            "currency": "eur",
+            "reason": "requested_by_customer",
+            "status": "succeeded",
+            "payment_intent": "pi_hold",
+            "charge": "ch_hold",
+            "balance_transaction": {
+                "id": "txn_actual",
+                "object": "balance_transaction",
+                "reporting_category": "refund"
+            }
+        },
+        {
+            "object": "refund",
+            "currency": "eur",
+            "amount": 800,
+            "status": "succeeded",
+            "reason": null,
+            "id": "re_release",
+            "payment_intent": "pi_hold",
+            "charge": "ch_hold",
+            "balance_transaction": {
+                "id": "txn_release",
+                "object": "balance_transaction",
+                "reporting_category": "partial_capture_reversal"
+            }
+        }
+    ],
+    "refund_webhook_events": [
+        {
+            "id": "evt_sandbox4",
+            "object": "event",
+            "type": "charge.refunded",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "ch_sandbox3",
+                    "object": "charge",
+                    "amount": 1200,
+                    "amount_captured": 400,
+                    "amount_refunded": 200,
+                    "captured": true,
+                    "currency": "eur",
+                    "livemode": false,
+                    "refunded": false,
+                    "status": "succeeded",
+                    "payment_intent": "pi_sandbox2",
+                    "payment_method_details": {
+                        "type": "card"
+                    }
+                },
+                "previous_attributes": {
+                    "amount_refunded": 0
+                }
+            }
+        },
+        {
+            "id": "evt_sandbox5",
+            "object": "event",
+            "type": "charge.refund.updated",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "re_sandbox1",
+                    "object": "refund",
+                    "amount": 200,
+                    "currency": "eur",
+                    "reason": "requested_by_customer",
+                    "status": "succeeded",
+                    "payment_intent": "pi_sandbox2",
+                    "charge": "ch_sandbox3"
+                },
+                "previous_attributes": []
+            }
+        },
+        {
+            "id": "evt_sandbox6",
+            "object": "event",
+            "type": "refund.updated",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "re_sandbox1",
+                    "object": "refund",
+                    "amount": 200,
+                    "currency": "eur",
+                    "reason": "requested_by_customer",
+                    "status": "succeeded",
+                    "payment_intent": "pi_sandbox2",
+                    "charge": "ch_sandbox3"
+                },
+                "previous_attributes": []
+            }
+        },
+        {
+            "id": "evt_sandbox7",
+            "object": "event",
+            "type": "refund.created",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "re_sandbox1",
+                    "object": "refund",
+                    "amount": 200,
+                    "currency": "eur",
+                    "reason": "requested_by_customer",
+                    "status": "succeeded",
+                    "payment_intent": "pi_sandbox2",
+                    "charge": "ch_sandbox3"
+                },
+                "previous_attributes": []
+            }
+        },
+        {
+            "id": "evt_sandbox8",
+            "object": "event",
+            "type": "payment_intent.succeeded",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "pi_sandbox2",
+                    "object": "payment_intent",
+                    "amount": 1200,
+                    "amount_capturable": 0,
+                    "amount_received": 400,
+                    "cancellation_reason": null,
+                    "capture_method": "manual",
+                    "currency": "eur",
+                    "livemode": false,
+                    "status": "succeeded",
+                    "latest_charge": "ch_sandbox3"
+                }
+            }
+        },
+        {
+            "id": "evt_sandbox9",
+            "object": "event",
+            "type": "charge.captured",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "ch_sandbox3",
+                    "object": "charge",
+                    "amount": 1200,
+                    "amount_captured": 400,
+                    "amount_refunded": 0,
+                    "captured": true,
+                    "currency": "eur",
+                    "livemode": false,
+                    "refunded": false,
+                    "status": "succeeded",
+                    "payment_intent": "pi_sandbox2",
+                    "payment_method_details": {
+                        "type": "card"
+                    }
+                },
+                "previous_attributes": {
+                    "amount_captured": 0,
+                    "captured": false
+                }
+            }
+        },
+        {
+            "id": "evt_sandbox10",
+            "object": "event",
+            "type": "payment_intent.amount_capturable_updated",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "pi_sandbox2",
+                    "object": "payment_intent",
+                    "amount": 1200,
+                    "amount_capturable": 1200,
+                    "amount_received": 0,
+                    "cancellation_reason": null,
+                    "capture_method": "manual",
+                    "currency": "eur",
+                    "livemode": false,
+                    "status": "requires_capture",
+                    "latest_charge": "ch_sandbox3"
+                }
+            }
+        },
+        {
+            "id": "evt_sandbox11",
+            "object": "event",
+            "type": "charge.succeeded",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "ch_sandbox3",
+                    "object": "charge",
+                    "amount": 1200,
+                    "amount_captured": 0,
+                    "amount_refunded": 0,
+                    "captured": false,
+                    "currency": "eur",
+                    "livemode": false,
+                    "refunded": false,
+                    "status": "succeeded",
+                    "payment_intent": "pi_sandbox2",
+                    "payment_method_details": {
+                        "type": "card"
+                    }
+                }
+            }
+        },
+        {
+            "id": "evt_sandbox12",
+            "object": "event",
+            "type": "payment_intent.created",
+            "api_version": "2020-08-27",
+            "livemode": false,
+            "data": {
+                "object": {
+                    "id": "pi_sandbox2",
+                    "object": "payment_intent",
+                    "amount": 1200,
+                    "amount_capturable": 0,
+                    "amount_received": 0,
+                    "cancellation_reason": null,
+                    "capture_method": "manual",
+                    "currency": "eur",
+                    "livemode": false,
+                    "status": "requires_payment_method",
+                    "latest_charge": null
+                }
+            }
+        }
+    ]
+}

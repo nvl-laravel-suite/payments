@@ -12,12 +12,13 @@ use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
  *
  * `refundedAmountMinor` counts refunds of captured money only. A released hold (a canceled or expired
  * authorization, or the uncaptured remainder of a partial capture) is not a refund.
+ * `releasedHoldRefundIds` optionally identifies historical provider reversal records for reconciliation.
  *
  * @api
  *
  * @phpstan-type HostedCheckout array{sessionId:string, url:string, expiresAt:\Carbon\CarbonImmutable}
  * @phpstan-type StripeCheckoutState array{sessionId:string, paymentIntentId:?string, accountId:string, livemode:bool, amountMinor:int, currency:string, status:string, paymentStatus:string, orderReference:?string, orderRevision:?string, expiresAt:\Carbon\CarbonImmutable, operationKey:?string, url:?string}
- * @phpstan-type StripePaymentState array{paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, capturedAmountMinor:int, refundedAmountMinor:int, currency:string, status:string, captureMethod:string, amountCapturableMinor:?int, paymentMethodType:?string, partialAuthorizationStatus:?string}
+ * @phpstan-type StripePaymentState array{paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, capturedAmountMinor:int, refundedAmountMinor:int, releasedHoldRefundIds?:list<string>, currency:string, status:string, captureMethod:string, amountCapturableMinor:?int, paymentMethodType:?string, partialAuthorizationStatus:?string}
  * @phpstan-type StripeRefundState array{refundId:string, paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, currency:string, status:string, reason:?string, operationKey:?string}
  */
 interface PaymentGateway

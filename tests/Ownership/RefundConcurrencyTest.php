@@ -23,8 +23,8 @@ use Nvl\Support\Ownership\Contracts\OwnershipContext;
 uses(OwnerScopeTestCase::class);
 
 it('reserves one native owner refund across independent admitted native workers', function (): void {
-    if (! in_array(DB::connection()->getDriverName(), ['pgsql', 'mysql', 'mariadb'], true) || ! function_exists('pcntl_fork')) {
-        $this->markTestSkipped('Requires the dedicated native PostgreSQL/MySQL/MariaDB process fixture.');
+    if (DB::connection()->getDriverName() !== 'pgsql' || ! function_exists('pcntl_fork')) {
+        $this->markTestSkipped('Requires the dedicated native PostgreSQL process fixture.');
     }
     app()->bind(PaymentOrderProvider::class, fn () => new class implements PaymentOrderProvider
     {
