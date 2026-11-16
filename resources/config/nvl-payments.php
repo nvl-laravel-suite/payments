@@ -7,6 +7,7 @@ use Nvl\Payments\Models\PaymentRefund;
 
 return ['models' => ['attempt' => PaymentAttempt::class, 'refund' => PaymentRefund::class], 'ownership' => ['scoped' => true],
     'enabled' => false,
+    'allow_live' => false,
     'connection' => null,
     // Choose vendor migrations or publish them into the host; never enable both modes.
     'migrations' => ['enabled' => false],

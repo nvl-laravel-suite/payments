@@ -3,6 +3,7 @@
     "configs": {
         "nvl-payments": {
             "common": [
+                "allow_live",
                 "connection",
                 "enabled",
                 "migrations.enabled",
@@ -15,6 +16,8 @@
                 "checkout.capture_method",
                 "checkout.expires_in_minutes",
                 "checkout.return_hosts",
+                "migrations.allow_destructive_rollback",
+                "minimum_amounts",
                 "reconciliation.batch_size",
                 "reconciliation.max_attempts",
                 "stripe.account_id",

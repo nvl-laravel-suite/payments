@@ -98,9 +98,13 @@ return new class extends Migration
         });
     }
 
-    /** Remove Payments tables in reverse dependency order. */
+    /** Remove Payments tables in reverse dependency order after explicit consent. */
     public function down(): void
     {
+        if (config('nvl-payments.migrations.allow_destructive_rollback') !== true) {
+            throw new LogicException('Payments financial rollback requires nvl-payments.migrations.allow_destructive_rollback.');
+        }
+
         $schema = $this->schema();
         $schema->dropIfExists(PaymentsTables::get(PaymentsTables::WebhookEvents));
         $schema->dropIfExists(PaymentsTables::get(PaymentsTables::Refunds));

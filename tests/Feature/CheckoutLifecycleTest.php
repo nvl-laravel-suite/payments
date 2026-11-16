@@ -9,6 +9,9 @@ use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Exceptions\PaymentsException;
+use Nvl\Payments\Exceptions\ProviderRefused;
+use Nvl\Payments\Exceptions\ProviderUnavailable;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\PaymentOperationJournal;
@@ -75,6 +78,17 @@ it('keeps failed or ambiguous creates reserved and blocks subsequent creates', f
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
 });
 
+it('releases a definitively refused Checkout and preserves ambiguous operation identities', function (PaymentsException $failure, string $status): void {
+    $this->gateway->shouldReceive('createCheckout')->once()->andThrow($failure);
+    expect(fn () => startTestCheckout())->toThrow($failure::class);
+    expect(PaymentOperation::sole()->status)->toBe($status)
+        ->and(PaymentAttempt::sole()->reservation_key === null)->toBe($status === 'failed');
+})->with([
+    'definitive refusal' => [new ProviderRefused('parameter_invalid_integer', 400), 'failed'],
+    'concurrent provider request' => [new ProviderRefused('idempotency_key_in_use', 409), 'unknown'],
+    'provider throttled' => [new ProviderUnavailable('rate_limit', 429), 'unknown'],
+]);
+
 it('blocks competing requests while the first remote call is running', function (): void {
     $this->gateway->shouldReceive('createCheckout')->once()->andReturnUsing(function ($order, $capture, $success, $cancel, $expiry): array {
         expect(fn () => startTestCheckout())->toThrow(DomainException::class);
@@ -97,6 +111,25 @@ it('rejects nonpayable orders and disallowed currencies before reserving', funct
     expect(fn () => startTestCheckout())->toThrow(DomainException::class);
     expect(PaymentAttempt::count())->toBe(0);
 })->with([[false, ['JPY']], [true, ['USD']]]);
+
+it('applies exact minor-unit minimums before reserving a hosted Checkout', function (int $amount, int $minimum, bool $accepted): void {
+    config(['nvl-payments.allowed_currencies' => ['EUR'], 'nvl-payments.minimum_amounts.EUR' => $minimum]);
+    $this->orders->shouldReceive('resolve')->andReturn(new OrderPaymentSnapshot('order-1', 'v1', $amount, 'EUR', 'Order one', null, true));
+
+    if ($accepted) {
+        $this->gateway->shouldReceive('createCheckout')->once()->withArgs(fn ($order) => $order->amountMinor === $amount)
+            ->andReturn(['sessionId' => 'cs_1', 'url' => 'https://checkout.stripe.com/one', 'expiresAt' => CarbonImmutable::now()->addHour()]);
+        expect(startTestCheckout()['sessionId'])->toBe('cs_1');
+    } else {
+        $this->gateway->shouldNotReceive('createCheckout');
+        expect(fn () => startTestCheckout())->toThrow(PaymentsException::class, 'below the configured payment minimum');
+        expect(PaymentAttempt::count())->toBe(0)->and(PaymentOperation::count())->toBe(0);
+    }
+})->with([
+    'below EUR minimum' => [49, 50, false],
+    'exact EUR minimum' => [50, 50, true],
+    'host-configured minimum' => [50, 100, false],
+]);
 
 it('rejects either return URL outside the configured HTTPS hosts', function (string $url): void {
     expect(fn () => startTestCheckout(success: $url))->toThrow(InvalidArgumentException::class);

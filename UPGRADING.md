@@ -1,5 +1,13 @@
 # Upgrading NVL Payments
 
+## 7.1.0 · Provider safety and financial storage
+
+Check live deployments for matching `stripe.livemode`, account and Stripe API key, then explicitly set `allow_live`. Preserve the prior `allowed_currencies` configuration when accepting currencies besides EUR. Configure minimums in integer minor units.
+
+Run provider-bound operations after the Payments connection commits. Host error handlers can retry `ProviderUnavailable` with the original operation identity. Inspect the Stripe code on `ProviderRefused` before changing configuration or inputs.
+
+Financial rollbacks are guarded. Apply the same guard to any previously published host copy of the original migration. Use the flag only on expendable data, since it permits the financial tables to be dropped. A database-wide fresh rebuild can drop tables without invoking individual migration rollbacks. Preserve payment attempts, operations, refunds, receipts and migration history in a consistent backup. Restore attempts before operations and refunds, then receipts and associated host records. Reconcile Stripe activity after the backup point before resuming writes.
+
 ## NVL Light native service boundary
 
 Target Laravel 13 and Testbench 11. Replace package Actions and thin workflow interfaces with `PaymentCheckout`, `PaymentAuthorizations`, `PaymentRefunds`, `PaymentReconciliation`, `PaymentWebhooks` and `PaymentReadService`. Consumers own their Actions, data and HTTP routes. Mutation services return refreshed models; checkout/provider/read facts are documented native arrays. Refund takes `(PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Authenticatable $actor)` and returns `PaymentRefund`.
@@ -16,13 +24,7 @@ Gateway payment facts no longer count a released hold as a refund. Attempts that
 
 `nvl:payments:reconcile` no longer aborts with an `OwnershipViolation` when one native owner is refused system admission; it reports the refusal, continues and exits non-zero. Stored Checkout expiry now keeps the provider instant in applications whose timezone is not UTC. Malformed attempt IDs raise `ModelNotFoundException` on every driver, and `resolveException` rejects a malformed operation UUID before any provider read.
 
-## Financial storage retention and rollback
-
-The historical creating migration deliberately retains its original behavior: `down()` drops webhook receipts, refunds, operations and payment attempts. `migrate:rollback`, `migrate:reset` or `migrate:fresh` can therefore destroy financial history and idempotency/replay evidence. The package adds no automatic financial retention period, pruning command or protective rollback guard. Keep the host's retention, access and retirement policy explicit.
-
-For ordinary release rollback, retain the database and choose code compatible with its existing schema. Before intentional storage retirement or recovery, stop new money-moving requests and webhook admission, drain or pause workers, and reconcile or record every unresolved provider operation. Take a consistent, access-controlled, restorable backup of all four Payments tables and migration history together with related host order and Ownership/adoption metadata; preserve provider identities, operation UUIDs and idempotency keys. Protect retained notes under the host's backup and access controls; their native TEXT storage is not package-encrypted. Verify restoration before dropping storage.
-
-Restore a consistent recovery point before replaying work. Reconcile current Stripe facts and any provider effects that occurred after the backup before resuming requests, webhooks or workers. Restoring older replay receipts or journals alone does not undo provider effects and can permit duplicate work. Keep the original migration files and hashes unchanged; deploying the current checks requires no financial data conversion or destructive rollback.
+## Earlier financial readiness checks
 
 Doctor now fails strict readiness for incomplete monetary columns, invalid local payment/refund bounds and aggregate live refund reservations above the original payment. It inspects the configured writer even when a read replica is clean or stale, emits only boolean results, and fails closed on source errors. It does not repair ledger rows, add database CHECK constraints, or certify remote provider agreement. Review and reconcile a reported inconsistency through the host's authorized recovery process.
 

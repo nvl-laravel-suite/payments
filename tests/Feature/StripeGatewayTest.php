@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Nvl\Payments\Exceptions\PaymentsException;
+use Nvl\Payments\Exceptions\ProviderRefused;
+use Nvl\Payments\Exceptions\ProviderUnavailable;
 use Nvl\Payments\Services\StripePaymentGateway;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Stripe\ApiRequestor;
+use Stripe\Exception\ApiConnectionException;
 use Stripe\HttpClient\ClientInterface;
 use Stripe\HttpClient\CurlClient;
 use Stripe\StripeClient;
@@ -24,6 +28,13 @@ beforeEach(function (): void {
                 return [json_encode(['id' => 'acct_expected', 'object' => 'account']), 200, []];
             }
             $response = array_shift($this->responses) ?? throw new RuntimeException('Unexpected Stripe request: '.$absUrl);
+
+            if ($response instanceof Throwable) {
+                throw $response;
+            }
+            if (isset($response['error'])) {
+                return [json_encode(['error' => $response['error']]), $response['http_status'] ?? 400, []];
+            }
 
             return [json_encode($response), 200, []];
         }
@@ -154,4 +165,34 @@ it('writes and retrieves the persisted refund operation proof through Stripe met
     expect($request['method'])->toBe('post')->and($request['absUrl'])->toEndWith('/v1/refunds')
         ->and($request['params']['metadata']['payment_operation_key'])->toBe('refund-key')->and($result['operationKey'])->toBe('refund-key');
     expect($this->gateway->refunds('pi_one')[0]['operationKey'])->toBe('refund-key');
+});
+
+it('classifies Stripe HTTP failures and preserves only their public identifiers', function (int $status, string $class): void {
+    $this->transport->responses[] = ['http_status' => $status, 'error' => ['type' => 'invalid_request_error', 'code' => 'example_code', 'message' => 'sensitive test detail']];
+    try {
+        $this->gateway->payment('pi_one');
+        $this->fail('Expected a provider error.');
+    } catch (PaymentsException $failure) {
+        expect($failure)->toBeInstanceOf($class)->stripeCode->toBe('example_code')->httpStatus->toBe($status);
+        expect($failure->getMessage())->not->toContain('sensitive test detail');
+    }
+})->with([
+    [400, ProviderRefused::class],
+    [409, ProviderRefused::class],
+    [429, ProviderUnavailable::class],
+    [503, ProviderUnavailable::class],
+]);
+
+it('classifies connection errors as retryable without exposing the transport exception', function (): void {
+    $this->transport->responses[] = ApiConnectionException::factory('sensitive connection detail');
+    expect(fn () => $this->gateway->payment('pi_one'))->toThrow(ProviderUnavailable::class, 'Stripe is temporarily unavailable for Payments.');
+});
+
+it('classifies errors on subsequent Stripe list pages', function (): void {
+    $this->transport->responses = [
+        $this->intent,
+        ['object' => 'list', 'url' => '/v1/refunds', 'data' => [$this->refund], 'has_more' => true],
+        ['http_status' => 503, 'error' => ['type' => 'api_error', 'message' => 'Refund service unavailable.']],
+    ];
+    expect(fn () => $this->gateway->refunds('pi_one'))->toThrow(ProviderUnavailable::class);
 });

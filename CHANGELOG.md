@@ -5,6 +5,11 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+- Refuse live Stripe keys until the deployment opts in with `allow_live`. Readiness checks now validate account and key mode.
+- Reject Stripe I/O inside a transaction on the Payments connection. Report network failures, rate limits and server errors as `ProviderUnavailable`, and other provider refusals as `ProviderRefused`.
+- Default to EUR with a 50-minor-unit minimum. Support an explicit per-currency minimum and allowed currency list.
+- Require `migrations.allow_destructive_rollback` for financial migration rollback.
+
 ## [7.0.3] - 2026-11-13
 
 ### Fixed

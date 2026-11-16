@@ -13,6 +13,7 @@ use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
+use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
@@ -112,8 +113,10 @@ final class PaymentRefunds
                 }
                 $this->journal->complete($operation, $result['refundId']);
             }, 5);
-        } catch (InvalidRequestException $exception) {
-            if ($exception->getHttpStatus() === 400 && in_array($exception->getStripeCode(), ['charge_already_refunded', 'amount_too_large'], true)) {
+        } catch (InvalidRequestException|ProviderRefused $exception) {
+            $status = $exception instanceof ProviderRefused ? $exception->httpStatus : $exception->getHttpStatus();
+            $code = $exception instanceof ProviderRefused ? $exception->stripeCode : $exception->getStripeCode();
+            if ($status === 400 && in_array($code, ['charge_already_refunded', 'amount_too_large'], true)) {
                 $connection->transaction(function () use ($attempt, $refund, $operation): void {
                     PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);
                     $refund->update(['status' => 'failed', 'last_synced_at' => now()]);

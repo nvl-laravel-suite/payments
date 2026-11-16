@@ -161,6 +161,46 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Exceptions\\ProviderRefused": {
+            "kind": "class",
+            "file": "src/Exceptions/ProviderRefused.php",
+            "methods": [
+                "__construct",
+                "because",
+                "package",
+                "publicContext",
+                "responseCode",
+                "responseHeaders",
+                "suggestedStatus",
+                "translationKey",
+                "translationParameters"
+            ],
+            "properties": [
+                "httpStatus",
+                "stripeCode"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Exceptions\\ProviderUnavailable": {
+            "kind": "class",
+            "file": "src/Exceptions/ProviderUnavailable.php",
+            "methods": [
+                "__construct",
+                "because",
+                "package",
+                "publicContext",
+                "responseCode",
+                "responseHeaders",
+                "suggestedStatus",
+                "translationKey",
+                "translationParameters"
+            ],
+            "properties": [
+                "httpStatus",
+                "stripeCode"
+            ],
+            "constants": []
+        },
         "Nvl\\Payments\\Models\\PaymentAttempt": {
             "kind": "class",
             "file": "src/Models/PaymentAttempt.php",
@@ -370,6 +410,15 @@
             "methods": [
                 "__construct",
                 "process"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Services\\PaymentsAvailability": {
+            "kind": "class",
+            "file": "src/Services/PaymentsAvailability.php",
+            "methods": [
+                "acceptsPayments"
             ],
             "properties": [],
             "constants": []

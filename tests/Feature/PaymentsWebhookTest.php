@@ -103,6 +103,15 @@ it('rejects wrong envelope mode and account before fetching', function (array $a
     expect($attempt->refresh()->state)->toBe('open');
 })->with([[['livemode' => true]], [['account' => 'acct_other']]]);
 
+it('rejects a signed live event before persistence or provider reads without live opt-in', function (): void {
+    config(['nvl-payments.stripe.livemode' => true]);
+    webhookAttempt(['stripe_livemode' => true]);
+
+    $this->gateway->shouldNotReceive('payment');
+    deliverWebhook(webhookPayload(['livemode' => true]))->assertStatus(400);
+    expect(PaymentWebhookEvent::count())->toBe(0);
+});
+
 it('does not mutate attempts on mismatched authoritative facts', function (array $attributes): void {
     $attempt = webhookAttempt();
     $this->gateway->shouldReceive('payment')->once()->andReturn(webhookPayment($attributes));

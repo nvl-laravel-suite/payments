@@ -37,6 +37,27 @@ it('creates four UUID-backed tables with the expected payment references', funct
     ]))->toBeTrue();
 });
 
+it('guards every financial table against migration rollback by default', function (): void {
+    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
+    $attempts = PaymentsTables::get(PaymentsTables::Attempts);
+    $attempt = '99999999-9999-4999-8999-999999999999';
+    DB::table($attempts)->insert([
+        'id' => $attempt, 'order_reference' => 'retained-order', 'order_revision' => '1',
+        'amount_minor' => 100, 'currency' => 'EUR', 'origin' => 'checkout', 'state' => 'reserved',
+    ]);
+
+    config()->set('nvl-payments.migrations.allow_destructive_rollback', false);
+    try {
+        expect(fn () => $migration->down())->toThrow(LogicException::class, 'allow_destructive_rollback');
+        foreach ([PaymentsTables::Attempts, PaymentsTables::Operations, PaymentsTables::Refunds, PaymentsTables::WebhookEvents] as $name) {
+            expect(Schema::hasTable(PaymentsTables::get($name)))->toBeTrue();
+        }
+        expect(DB::table($attempts)->where('id', $attempt)->exists())->toBeTrue();
+    } finally {
+        config()->set('nvl-payments.migrations.allow_destructive_rollback', true);
+    }
+});
+
 it('allows multiple unreserved attempts but rejects a duplicate reservation', function (): void {
     DB::table(PaymentsTables::Attempts)->insert([
         'id' => '11111111-1111-4111-8111-111111111111',

@@ -34,13 +34,14 @@ final class PaymentsDoctor
     {
         $orders = $this->orders;
         $access = $this->access;
+        $key = config('nvl-payments.stripe.secret');
 
         $checks = [
             'enabled' => config('nvl-payments.enabled') === true,
-            'stripe_secret' => is_string(config('nvl-payments.stripe.secret')) && trim(config('nvl-payments.stripe.secret')) !== '',
+            'stripe_secret' => is_string($key) && trim($key) !== '',
             'webhook_secret' => is_string(config('nvl-payments.stripe.webhook_secret')) && trim(config('nvl-payments.stripe.webhook_secret')) !== '',
             'stripe_account' => is_string(config('nvl-payments.stripe.account_id')) && str_starts_with(config('nvl-payments.stripe.account_id'), 'acct_'),
-            'stripe_mode' => is_bool(config('nvl-payments.stripe.livemode')),
+            'stripe_mode' => is_string($key) && PaymentsAvailability::allowsKey($key),
             'currencies' => is_array(config('nvl-payments.allowed_currencies')) && config('nvl-payments.allowed_currencies') !== [],
             'return_hosts' => is_array(config('nvl-payments.checkout.return_hosts')) && config('nvl-payments.checkout.return_hosts') !== [],
             'capture_method' => in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'manual'], true),

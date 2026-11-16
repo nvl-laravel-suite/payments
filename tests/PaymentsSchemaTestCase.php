@@ -26,6 +26,7 @@ class PaymentsSchemaTestCase extends PaymentsTestCase
         $app['config']->set([
             'nvl-payments.enabled' => true,
             'nvl-payments.migrations.enabled' => true,
+            'nvl-payments.migrations.allow_destructive_rollback' => true,
         ]);
     }
 }

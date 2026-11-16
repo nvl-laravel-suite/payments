@@ -10,16 +10,18 @@ return [
     'models' => ['attempt' => PaymentAttempt::class, 'refund' => PaymentRefund::class],
     'ownership' => ['scoped' => true],
     'enabled' => false,
+    'allow_live' => false,
     'connection' => null,
     // Choose vendor migrations or publish them into the host; never enable both modes.
-    'migrations' => ['enabled' => false],
+    'migrations' => ['enabled' => false, 'allow_destructive_rollback' => false],
     'stripe' => [
         'secret' => env('NVL_PAYMENTS_STRIPE_SECRET'),
         'webhook_secret' => env('NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET'),
         'account_id' => env('NVL_PAYMENTS_STRIPE_ACCOUNT_ID'),
         'livemode' => false,
     ],
-    'allowed_currencies' => [],
+    'allowed_currencies' => ['EUR'],
+    'minimum_amounts' => ['EUR' => 50],
     'checkout' => [
         'return_hosts' => [],
         'expires_in_minutes' => 120,

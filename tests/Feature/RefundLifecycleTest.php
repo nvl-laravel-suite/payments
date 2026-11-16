@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Exceptions\PaymentsException;
+use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
@@ -159,15 +160,18 @@ it('rejects authorization-only and mismatched remote payments', function (int $c
     expect(PaymentOperation::count())->toBe(0);
 })->with([0, 500]);
 
-it('marks confirmed Stripe balance rejections failed and refreshes the external refund facts', function (): void {
+it('marks confirmed Stripe balance rejections failed and refreshes the external refund facts', function (Throwable $failure): void {
     $this->gateway->shouldReceive('payment')->twice()->andReturn(refundPaymentState(), refundPaymentState(1200));
     $this->gateway->shouldReceive('refunds')->andReturn([]);
-    $this->gateway->shouldReceive('refund')->once()->andThrow(InvalidRequestException::factory('Already refunded', 400, null, null, null, 'charge_already_refunded'));
-    expect(fn () => refundPayment(700, $this->uuid))->toThrow(InvalidRequestException::class);
+    $this->gateway->shouldReceive('refund')->once()->andThrow($failure);
+    expect(fn () => refundPayment(700, $this->uuid))->toThrow($failure::class);
     expect(PaymentRefund::sole()->status)->toBe('failed')->and(PaymentOperation::sole()->status)->toBe('failed')
         ->and($this->attempt->refresh()->refunded_amount_minor)->toBe(1200);
     expect(refundPayment(700, $this->uuid)['status'])->toBe('failed');
-});
+})->with([
+    'custom Stripe SDK binding' => [InvalidRequestException::factory('Already refunded', 400, null, null, null, 'charge_already_refunded')],
+    'built-in provider refusal' => [new ProviderRefused('charge_already_refunded', 400)],
+]);
 
 it('keeps malformed refund responses unresolved', function (): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());

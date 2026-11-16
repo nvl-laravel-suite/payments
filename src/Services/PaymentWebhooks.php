@@ -53,7 +53,8 @@ final class PaymentWebhooks
             throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Malformed Payments event.');
         }
         $event = Event::constructFrom($decoded);
-        if ($event->livemode !== Config::get('nvl-payments.stripe.livemode')
+        if (($event->livemode && Config::get('nvl-payments.allow_live') !== true)
+            || $event->livemode !== Config::get('nvl-payments.stripe.livemode')
             || ($event['account'] !== null && $event['account'] !== Config::get('nvl-payments.stripe.account_id'))) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Wrong Payments account or mode.');
         }

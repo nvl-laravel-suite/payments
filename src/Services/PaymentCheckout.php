@@ -16,6 +16,7 @@ use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Exceptions\PaymentsException;
+use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
@@ -226,6 +227,13 @@ final class PaymentCheckout
         if (! in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'manual'], true) || config()->integer('nvl-payments.checkout.expires_in_minutes') < 30 || config()->integer('nvl-payments.checkout.expires_in_minutes') > 1440) {
             throw PaymentsException::because(PaymentsResponseCode::InvalidConfiguration, 'Invalid Checkout capture method or expiration interval.');
         }
+        $minimum = config('nvl-payments.minimum_amounts.'.strtoupper($order->currency), 1);
+        if (! is_int($minimum) || $minimum < 1) {
+            throw PaymentsException::because(PaymentsResponseCode::InvalidConfiguration, 'Payment minimums must be positive minor units.');
+        }
+        if ($order->amountMinor < $minimum) {
+            throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Order is below the configured payment minimum.');
+        }
         foreach ([$successUrl, $cancelUrl] as $url) {
             $parts = parse_url($url);
             if ($parts === false || filter_var($url, FILTER_VALIDATE_URL) === false || ($parts['scheme'] ?? null) !== 'https' || ! in_array(strtolower($parts['host'] ?? ''), config()->array('nvl-payments.checkout.return_hosts'), true) || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && $parts['port'] !== 443)) {
@@ -270,6 +278,10 @@ final class PaymentCheckout
     /** A request Stripe refused outright created no Session; every other failure stays uncertain. */
     private function rejectedBeforeCreation(Throwable $exception): bool
     {
+        if ($exception instanceof ProviderRefused) {
+            return $exception->stripeCode !== 'idempotency_key_in_use';
+        }
+
         return ($exception instanceof InvalidRequestException || $exception instanceof AuthenticationException || $exception instanceof PermissionException)
             && $exception->getStripeCode() !== 'idempotency_key_in_use';
     }

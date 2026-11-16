@@ -8,7 +8,9 @@ The host owns orders, prices, permissions, fulfillment and HTTP. Payments owns h
 
 Publish `nvl-payments-config` and choose one migration source. Vendor migrations require `nvl-payments.migrations.enabled=true`; published migrations require that option to remain false. Keep `nvl-payments.enabled=false` until schema, Stripe configuration and host adapters are ready.
 
-Configure the Stripe secret, account ID, live/test mode, Payments-specific webhook secret, allowed currencies and HTTPS checkout return hosts. Tables use the canonical `nvl_payments_*` defaults and `nvl-payments.connection` selects the configured connection.
+Configure the Stripe secret, account ID, live/test mode, Payments-specific webhook secret and HTTPS checkout return hosts. Live secret and restricted keys require both `nvl-payments.stripe.livemode=true` and `nvl-payments.allow_live=true`. Use `Nvl\Payments\Services\PaymentsAvailability::acceptsPayments()` through the Laravel container to check locally whether Payments is enabled with an allowed key and a configured account.
+
+Set `nvl-payments.allowed_currencies` to the uppercase ISO currency codes you accept. It defaults to EUR. Checkout uses integer minor units and rejects amounts below the currency's `nvl-payments.minimum_amounts` entry before contacting Stripe. EUR defaults to 50 minor units and other allowed currencies use 1 unless configured. Tables use the canonical `nvl_payments_*` defaults and `nvl-payments.connection` selects the configured connection.
 
 ## Required bindings
 
@@ -76,7 +78,9 @@ The service verifies the signing secret, freshness, envelope, account and mode b
 
 ## Recovery and ownership
 
-Remote calls are bracketed by local transactions and persisted operation IDs. Checkout, authorization and refund operations must start outside an existing transaction. Preserve unknown operations and reserved funds through provider timeouts; reconcile them using exact stored provider metadata before initiating another mutation. A Checkout request Stripe refuses outright (invalid request, rejected or restricted credential, rate limit) created no Session: the attempt is recorded as `failed`, its reservation is released and the next `start` creates a new Session. Timeouts, server errors and idempotency conflicts stay reserved.
+Remote calls are bracketed by local transactions and persisted operation IDs. Every Stripe call must run outside an ambient transaction on the Payments connection, including reads, reconciliation and signed webhook processing.
+
+The built-in gateway throws `ProviderUnavailable` for connection failures, HTTP 429 and server errors. Keep the operation identity and reconcile uncertain results before retrying. It throws `ProviderRefused` for other client errors, exposing the Stripe code through `stripeCode` when available. A definitive Checkout refusal records the attempt and operation as `failed` and releases the reservation. Idempotency conflicts can mean an earlier request is still in progress, so the reservation stays in place pending reconciliation.
 
 Manual card capture is final, including partial capture. Stripe reports a released hold (a canceled or expired authorization, or the uncaptured remainder of a partial capture) on the charge as refunded; gateway payment facts exclude it, so `refundedAmountMinor` counts captured money only. Pending/unknown refunds reserve balance. Reconciliation correlates lost refund responses by operation metadata and complete payment identity, never by equal amounts. `payment_exception` keeps financial facts visible until separately authorized acceptance, preserving the original order revision. Domain notifications follow the source connection's outer commit and disappear on rollback.
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Providers;
 
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\ServiceProvider;
 use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Payments\Console\Commands\PaymentsDoctorCommand;
@@ -62,11 +61,16 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
         $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-payments.php', 'payments');
         $this->app->singleton(PaymentsModelRegistry::class);
         $this->app->booting(fn () => $this->app->make(PaymentsModelRegistry::class)->prepare());
-        $this->app->bindIf(PaymentGateway::class, fn (): StripePaymentGateway => new StripePaymentGateway(
-            new StripeClient(Config::string('nvl-payments.stripe.secret')),
-            Config::string('nvl-payments.stripe.account_id'),
-            Config::boolean('nvl-payments.stripe.livemode'),
-        ));
+        $this->app->bindIf(PaymentGateway::class, static function (): StripePaymentGateway {
+            $secret = config('nvl-payments.stripe.secret');
+            $account = config('nvl-payments.stripe.account_id');
+
+            return new StripePaymentGateway(
+                new StripeClient(['api_key' => is_string($secret) && preg_match('/^[^\s]+$/D', $secret) === 1 ? $secret : null]),
+                is_string($account) ? $account : '',
+                config('nvl-payments.stripe.livemode') === true,
+            );
+        });
         $this->app->bindIf(PaymentOwnerWorklist::class, StoredPaymentOwnerWorklist::class);
         $this->app->bindIf(PaymentOrderProvider::class, DenyPaymentOrderProvider::class);
         $this->app->bindIf(PaymentManagementAccess::class, DenyPaymentManagementAccess::class);
