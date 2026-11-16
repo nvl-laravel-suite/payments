@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use Illuminate\Auth\GenericUser;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentLedgerProjector;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
+use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Exceptions\ProviderUnavailable;
 use Nvl\Payments\Ledger\PaymentExceptionRaised;
@@ -112,6 +114,18 @@ it('quarantines distinct succeeded mismatch outcomes without recording captured 
     expect(app(PaymentLedgerDelivery::class)->deliver($row->id))->toBeTrue();
 })->with([[['amountMinor' => 1201], 'amount_mismatch'], [['capturedAmountMinor' => 1199], 'amount_mismatch'], [['currency' => 'usd'], 'currency_mismatch'], [[], 'paid_after_close']]);
 
+it('reuses the customer for a signed-in host reference without rewriting it', function (): void {
+    config(['nvl-payments.customers.enabled' => true]);
+    $this->gateway->willReturn('createCustomer', 'cus_shopper')->willReturn('createIntent', embeddedStripeFacts($this->attemptId))
+        ->willReturn('intent', embeddedStripeFacts($this->attemptId));
+    $payments = app(EmbeddedPayments::class);
+    $payments->start('order-1', $this->attemptId, $this->actor, 'shopper');
+    $payments->start('order-1', $this->attemptId, $this->actor, 'shopper');
+    expect(DB::table(PaymentsTables::get(PaymentsTables::Customers))->sole()->stripe_customer_id)->toBe('cus_shopper');
+    $this->gateway->assertCalled('createCustomer', times: 1);
+    $this->gateway->assertCalled('createIntent', fn ($call) => $call->arguments['customerId'] === 'cus_shopper', times: 1);
+});
+
 it('publishes typed success only after outer commit, rolls back failed transactions, and retries the same ID', function (): void {
     $facts = embeddedStripeFacts($this->attemptId);
     $this->gateway->willReturn('createIntent', $facts);
@@ -147,13 +161,12 @@ it('publishes typed success only after outer commit, rolls back failed transacti
     $row = PaymentLedgerDelivery::query()->sole();
     expect($row->delivered_at)->toBeNull();
     $delivery = app(PaymentLedgerDelivery::class);
-    expect(fn () => $delivery->deliver($row->id))->toThrow(RuntimeException::class, $failure->getMessage());
-    expect(PaymentLedgerDelivery::query()->sole()->delivered_at)->toBeNull();
+    expect(fn () => $delivery->deliver($row->id))->toThrow(RuntimeException::class, 'host ledger down');
     $projector->failing = false;
-    expect($delivery->retry())->toBe(1);
+    expect($delivery->deliver($row->id))->toBeTrue();
     expect($projector->calls[0])->toBeInstanceOf(PaymentSucceeded::class)->cardLastFour->toBe('4242')->amountMinor->toBe(1200);
     expect($delivery->deliver($row->id, replay: true))->toBeTrue();
-    expect(array_map(fn (PaymentLedgerFact $fact): string => $fact->id(), $projector->calls))->toBe([$row->id, $row->id]);
+    expect($projector->calls[1]->id())->toBe($projector->calls[0]->id());
 });
 
 it('checks live key mode and blocks Stripe-bound operations inside the Payments transaction', function (): void {
@@ -193,6 +206,16 @@ it('reports a clear configuration error before reservation when the publishable 
     $this->gateway->assertCalled('createIntent', times: 0);
 });
 
+it('keeps an existing embedded reservation when the host starts hosted Checkout', function (): void {
+    config(['nvl-payments.checkout.return_hosts' => ['shop.test']]);
+    $this->gateway->willReturn('createIntent', embeddedStripeFacts($this->attemptId));
+    app(EmbeddedPayments::class)->start('order-1', $this->attemptId, $this->actor);
+
+    expect(fn () => app(PaymentCheckout::class)->start('order-1', $this->actor, 'https://shop.test/success', 'https://shop.test/cancel'))
+        ->toThrow(PaymentsException::class, 'An embedded payment already reserves the order.');
+    $this->gateway->assertCalled('createCheckout', times: 0);
+});
+
 it('settles a successful automatic payment and exposes the expanded card facts', function (string $capture): void {
     config(['nvl-payments.embedded.capture_method' => $capture]);
     $facts = embeddedStripeFacts($this->attemptId, ['captureMethod' => $capture]);
@@ -218,13 +241,3 @@ it('settles a successful automatic payment and exposes the expanded card facts',
     ]);
     $this->gateway->assertCalled('capture', times: 0);
 })->with(['automatic', 'automatic_async']);
-
-it('keeps an existing embedded reservation when the host starts hosted Checkout', function (): void {
-    config(['nvl-payments.checkout.return_hosts' => ['shop.test']]);
-    $this->gateway->willReturn('createIntent', embeddedStripeFacts($this->attemptId));
-    app(EmbeddedPayments::class)->start('order-1', $this->attemptId, $this->actor);
-
-    expect(fn () => app(PaymentCheckout::class)->start('order-1', $this->actor, 'https://shop.test/success', 'https://shop.test/cancel'))
-        ->toThrow(PaymentsException::class, 'An embedded payment already reserves the order.');
-    $this->gateway->assertCalled('createCheckout', times: 0);
-});

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Payments\Providers;
 
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Payments\Console\Commands\PaymentsDoctorCommand;
@@ -15,6 +16,8 @@ use Nvl\Payments\Contracts\PaymentIntentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Contracts\PaymentOwnerWorklist;
+use Nvl\Payments\Http\PaymentWebhookController;
+use Nvl\Payments\Http\RequirePaymentWebhookSecret;
 use Nvl\Payments\Ownership\PaymentsAdoptionAdapter;
 use Nvl\Payments\Ownership\PaymentsResourceRegistrar;
 use Nvl\Payments\Ownership\StoredPaymentOwnerWorklist;
@@ -68,7 +71,10 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
             $account = config('nvl-payments.stripe.account_id');
 
             return new StripePaymentGateway(
-                new StripeClient(['api_key' => is_string($secret) && preg_match('/^[^\s]+$/D', $secret) === 1 ? $secret : null, 'stripe_version' => StripePaymentGateway::API_VERSION]),
+                new StripeClient([
+                    'api_key' => is_string($secret) && preg_match('/^(sk|rk)_(test|live)_[^\s]+$/D', $secret) === 1 ? $secret : null,
+                    'stripe_version' => StripePaymentGateway::API_VERSION,
+                ]),
                 is_string($account) ? $account : '',
                 config('nvl-payments.stripe.livemode') === true,
             );
@@ -101,6 +107,10 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
             __DIR__.'/../../lang' => lang_path('vendor/nvl-payments'),
         ], 'nvl-payments-translations');
         $this->commands([PaymentsDoctorCommand::class, PaymentsReconcileCommand::class, PaymentsRetryCommand::class]);
+        if (config('nvl-payments.webhooks.route') === true && ! $this->app->routesAreCached()) {
+            Route::post(config()->string('nvl-payments.webhooks.path'), PaymentWebhookController::class)
+                ->middleware(RequirePaymentWebhookSecret::class)->name('nvl.payments.stripe.webhook');
+        }
         $path = __DIR__.'/../../database/migrations/payments';
 
         $this->publishes([

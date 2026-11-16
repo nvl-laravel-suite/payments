@@ -16,6 +16,7 @@
                 "checkout.capture_method",
                 "checkout.expires_in_minutes",
                 "checkout.return_hosts",
+                "customers.enabled",
                 "embedded.allowed_payment_method_types",
                 "embedded.capture_method",
                 "embedded.expires_in_minutes",
@@ -28,7 +29,13 @@
                 "stripe.livemode",
                 "stripe.publishable_key",
                 "stripe.secret",
-                "stripe.webhook_secret"
+                "stripe.webhook_secret",
+                "webhooks.connection",
+                "webhooks.max_attempts",
+                "webhooks.path",
+                "webhooks.queue",
+                "webhooks.route",
+                "webhooks.stale_after_minutes"
             ]
         }
     }

@@ -39,6 +39,7 @@ class EmbeddedPayments
         private readonly PaymentOrderOwnership $scope,
         private readonly PaymentStateSyncer $syncer,
         private readonly PaymentReconciliation $reconciliation,
+        private readonly ?PaymentCustomers $customers = null,
     ) {}
 
     /**
@@ -46,7 +47,7 @@ class EmbeddedPayments
      *
      * @return EmbeddedCheckout
      */
-    public function start(string $orderReference, string $attemptReference, Authenticatable $actor): array
+    public function start(string $orderReference, string $attemptReference, Authenticatable $actor, ?string $hostCustomerReference = null): array
     {
         PaymentsAvailability::assertOutsideTransaction();
         $order = $this->orders->resolve($orderReference);
@@ -65,10 +66,11 @@ class EmbeddedPayments
         $attempt = PaymentsModelRegistry::attemptQuery()->find($attemptReference);
         if ($attempt === null) {
             [$capture, $methods, $expiry] = $this->configuration($order);
+            $customer = $hostCustomerReference === null ? null : ($this->customers ?? app(PaymentCustomers::class))->resolve($hostCustomerReference);
             $connection = PaymentsModelRegistry::newAttempt()->getConnection();
             try {
-                $attempt = $connection->transaction(function () use ($order, $attemptReference, $actorId, $capture, $methods, $expiry): PaymentAttempt {
-                    $operation = $this->reserve($order, $attemptReference, (string) $actorId);
+                $attempt = $connection->transaction(function () use ($order, $attemptReference, $actorId, $capture, $methods, $expiry, $customer, $hostCustomerReference): PaymentAttempt {
+                    $operation = $this->reserve($order, $attemptReference, (string) $actorId, $hostCustomerReference);
                     $reservation = $this->scope->reservationKey($order->reference);
                     PaymentOperation::query()->whereKey($operation->id)->update(['id' => $operation->id]);
                     $attempt = PaymentsModelRegistry::attemptQuery()->find($attemptReference);
@@ -83,6 +85,7 @@ class EmbeddedPayments
                             'reservation_key' => $reservation,
                             'capture_method' => $capture,
                             'embedded_methods' => $methods,
+                            'embedded_customer' => $customer,
                             'stripe_account_id' => config('nvl-payments.stripe.account_id'),
                             'stripe_livemode' => config('nvl-payments.stripe.livemode'),
                             'expires_at' => now()->addMinutes($expiry),
@@ -106,7 +109,7 @@ class EmbeddedPayments
         if ($attempt->stripe_account_id !== config('nvl-payments.stripe.account_id') || $attempt->stripe_livemode !== config('nvl-payments.stripe.livemode')) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Embedded payment belongs to another Stripe account or mode.');
         }
-        $operation = $this->reserve($order, $attemptReference, (string) $actorId);
+        $operation = $this->reserve($order, $attemptReference, (string) $actorId, $hostCustomerReference);
         $intentId = $attempt->stripe_payment_intent_id;
         $expiry = $attempt->expires_at?->toImmutable() ?? throw new \LogicException('Embedded attempt has no expiry.');
         if ($intentId === null && ($expiry->isPast() || $operation->status === 'failed')) {
@@ -121,7 +124,7 @@ class EmbeddedPayments
 
         try {
             $remote = $intentId === null
-                ? $this->gateway->createIntent($order, $attempt->capture_method ?? 'automatic_async', $attempt->embedded_methods ?? [], null, $operation->idempotency_key)
+                ? $this->gateway->createIntent($order, $attempt->capture_method ?? 'automatic_async', $attempt->embedded_methods ?? [], $attempt->embedded_customer, $operation->idempotency_key)
                 : $this->gateway->intent($intentId);
             if ($intentId !== null && $remote['paymentIntentId'] !== $intentId) {
                 throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe returned a different intent.');
@@ -150,7 +153,7 @@ class EmbeddedPayments
         ];
     }
 
-    /** Read authoritative payment facts after host authorization. */
+    /** Read authoritative payment and refund facts after host authorization. */
     public function settle(string $attemptReference, Authenticatable $actor): PaymentAttempt
     {
         return $this->reconciliation->reconcile($this->authorizedAttempt($attemptReference, $actor, 'settle_embedded'));
@@ -234,9 +237,9 @@ class EmbeddedPayments
         return [$capture, $methods, $expiry];
     }
 
-    private function reserve(OrderPaymentSnapshot $order, string $attempt, string $actor): PaymentOperation
+    private function reserve(OrderPaymentSnapshot $order, string $attempt, string $actor, ?string $customerReference): PaymentOperation
     {
-        $fingerprint = hash('sha256', json_encode([$order->revision, strtoupper($order->currency), null], JSON_THROW_ON_ERROR));
+        $fingerprint = hash('sha256', json_encode([$order->revision, strtoupper($order->currency), $customerReference], JSON_THROW_ON_ERROR));
 
         return $this->journal->reserve('embedded', $order->reference, $attempt, $actor, $fingerprint, $order->amountMinor);
     }

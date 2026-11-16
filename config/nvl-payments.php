@@ -28,7 +28,16 @@ return [
         'allowed_payment_method_types' => ['card'],
         'expires_in_minutes' => 30,
     ],
+    'customers' => ['enabled' => false],
     'refund_reasons' => [],
+    'webhooks' => [
+        'route' => false,
+        'path' => 'nvl/payments/stripe/webhook',
+        'connection' => null,
+        'queue' => 'payments',
+        'max_attempts' => 5,
+        'stale_after_minutes' => 5,
+    ],
     'checkout' => [
         'return_hosts' => [],
         'expires_in_minutes' => 120,

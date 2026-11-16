@@ -6,10 +6,12 @@ namespace Nvl\Payments\Testing;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Container\Container;
+use Nvl\Payments\Contracts\PaymentCustomerGateway;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentIntentGateway;
 use Nvl\Payments\Contracts\PaymentRefundLookup;
 use Nvl\Payments\Exceptions\ProviderRefused;
+use Nvl\Payments\Services\PaymentWebhooks;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Testing\FakeCalls;
 use TypeError;
@@ -25,7 +27,7 @@ use TypeError;
  * @phpstan-import-type StripeIntentState from \Nvl\Payments\Contracts\PaymentIntentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
  */
-class FakePaymentGateway implements PaymentIntentGateway, PaymentRefundLookup
+class FakePaymentGateway implements PaymentCustomerGateway, PaymentIntentGateway, PaymentRefundLookup
 {
     use FakeCalls;
 
@@ -199,10 +201,33 @@ class FakePaymentGateway implements PaymentIntentGateway, PaymentRefundLookup
         return $this->intentState($this->invoke('intent', ['intentId' => $intentId]));
     }
 
+    public function createCustomer(string $idempotencyKey): string
+    {
+        $id = $this->invoke('createCustomer', ['idempotency_key' => $idempotencyKey]);
+        if (! is_string($id)) {
+            throw new TypeError('FakePaymentGateway requires a scripted Stripe customer ID.');
+        }
+
+        return $id;
+    }
+
     /** @return StripeRefundState */
     public function readRefund(string $refundId): array
     {
         return $this->refundState($this->invoke('readRefund', ['refundId' => $refundId]));
+    }
+
+    /**
+     * Deliver a fixture through the real signed inbox. Omit the secret to exercise unsigned delivery.
+     *
+     * @param  array<string,mixed>  $event
+     */
+    public function deliverWebhook(PaymentWebhooks $webhooks, array $event, #[\SensitiveParameter] ?string $secret = null, ?int $timestamp = null): void
+    {
+        $payload = json_encode($event, JSON_THROW_ON_ERROR);
+        $timestamp ??= time();
+        $signature = $secret === null ? '' : 't='.$timestamp.',v1='.hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
+        $webhooks->process($payload, $signature);
     }
 
     /** @return StripeIntentState */

@@ -15,6 +15,15 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Contracts\\PaymentCustomerGateway": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentCustomerGateway.php",
+            "methods": [
+                "createCustomer"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Contracts\\PaymentGateway": {
             "kind": "interface",
             "file": "src/Contracts/PaymentGateway.php",
@@ -238,6 +247,15 @@
             ],
             "constants": []
         },
+        "Nvl\\Payments\\Http\\RequirePaymentWebhookSecret": {
+            "kind": "class",
+            "file": "src/Http/RequirePaymentWebhookSecret.php",
+            "methods": [
+                "handle"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Ledger\\PaymentCanceled": {
             "kind": "class",
             "file": "src/Ledger/PaymentCanceled.php",
@@ -459,6 +477,7 @@
                 "checkout_url",
                 "created_at",
                 "currency",
+                "embedded_customer",
                 "embedded_methods",
                 "exception_reason",
                 "expires_at",
@@ -672,6 +691,8 @@
             "file": "src/Services/PaymentWebhooks.php",
             "methods": [
                 "__construct",
+                "enqueue",
+                "eventTypes",
                 "process"
             ],
             "properties": [],
@@ -708,7 +729,9 @@
                 "capture",
                 "checkout",
                 "createCheckout",
+                "createCustomer",
                 "createIntent",
+                "deliverWebhook",
                 "expireCheckout",
                 "fake",
                 "intent",

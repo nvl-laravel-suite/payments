@@ -34,16 +34,16 @@ final class PaymentsDoctor
     {
         $orders = $this->orders;
         $access = $this->access;
-        $key = config('nvl-payments.stripe.secret');
 
         $checks = [
             'enabled' => config('nvl-payments.enabled') === true,
-            'stripe_secret' => is_string($key) && trim($key) !== '',
+            'stripe_secret' => is_string(config('nvl-payments.stripe.secret')) && trim(config('nvl-payments.stripe.secret')) !== '',
             'webhook_secret' => is_string(config('nvl-payments.stripe.webhook_secret')) && trim(config('nvl-payments.stripe.webhook_secret')) !== '',
             'stripe_account' => is_string(config('nvl-payments.stripe.account_id')) && str_starts_with(config('nvl-payments.stripe.account_id'), 'acct_'),
-            'stripe_mode' => is_string($key) && PaymentsAvailability::allowsKey($key),
+            'stripe_mode' => is_string($key = config('nvl-payments.stripe.secret')) && PaymentsAvailability::allowsKey($key),
             'currencies' => is_array(config('nvl-payments.allowed_currencies')) && config('nvl-payments.allowed_currencies') !== [],
-            'return_hosts' => is_array(config('nvl-payments.checkout.return_hosts')) && config('nvl-payments.checkout.return_hosts') !== [],
+            'return_hosts' => (is_array(config('nvl-payments.checkout.return_hosts')) && config('nvl-payments.checkout.return_hosts') !== [])
+                || (is_string($publishable = config('nvl-payments.stripe.publishable_key')) && str_starts_with($publishable, config('nvl-payments.stripe.livemode') === true ? 'pk_live_' : 'pk_test_')),
             'capture_method' => in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'automatic_async', 'manual'], true),
             'order_provider' => ! $orders instanceof DenyPaymentOrderProvider,
             'management_access' => ! $access instanceof DenyPaymentManagementAccess,

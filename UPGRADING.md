@@ -1,5 +1,13 @@
 # Upgrading NVL Payments
 
+## 7.4.0 · Stripe customers and signed webhook inbox
+
+Apply the additive customer and inbox migration. Set `webhooks.connection` and `webhooks.queue` for an asynchronous worker. Register the exact event allowlist from `PaymentWebhooks::eventTypes()` in Stripe. Schedule `nvl:payments:retry` for webhook and ledger recovery.
+
+Enable `webhooks.route` for the package receiver, or call `PaymentWebhooks::enqueue()` from a host route with the raw request body and Stripe signature. Existing `process()` integrations can keep their original call.
+
+Enable `customers.enabled` only where the host has a trusted signed-in customer reference. Pass that reference as the fourth argument to `EmbeddedPayments::start()`. Custom provider adapters can implement the separate `PaymentCustomerGateway` capability. [Stripe webhook signing](https://docs.stripe.com/webhooks/signature) · [Stripe customer creation](https://docs.stripe.com/api/customers/create)
+
 ## 7.3.0 · Host ledger and per-payment refunds
 
 Apply the additive ledger outbox migration. Bind `PaymentLedgerProjector` to mirror facts into host records. Use a unique fact receipt and commit it atomically with the ledger changes. Throw when projection fails so the fact remains recoverable. Run the ledger retry entry point regularly.

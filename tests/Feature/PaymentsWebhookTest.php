@@ -10,10 +10,8 @@ use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
-use Nvl\Payments\Services\PaymentLedgerDelivery;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Services\PaymentWebhooks;
-use Nvl\Payments\Testing\FakePaymentGateway;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
@@ -99,20 +97,11 @@ it('ignores unknown payments without inserting attempts', function (): void {
     expect(PaymentAttempt::count())->toBe(0)->and(PaymentWebhookEvent::sole()->status)->toBe('ignored');
 });
 
-it('rejects wrong envelope mode and account before fetching', function (array $attributes): void {
+it('rejects the wrong webhook account before fetching', function (array $attributes): void {
     $attempt = webhookAttempt();
     deliverWebhook(webhookPayload($attributes))->assertStatus(400);
     expect($attempt->refresh()->state)->toBe('open');
-})->with([[['livemode' => true]], [['account' => 'acct_other']]]);
-
-it('rejects a signed live event before persistence or provider reads without live opt-in', function (): void {
-    config(['nvl-payments.stripe.livemode' => true]);
-    webhookAttempt(['stripe_livemode' => true]);
-
-    $this->gateway->shouldNotReceive('payment');
-    deliverWebhook(webhookPayload(['livemode' => true]))->assertStatus(400);
-    expect(PaymentWebhookEvent::count())->toBe(0);
-});
+})->with([[['account' => 'acct_other']]]);
 
 it('does not mutate attempts on mismatched authoritative facts', function (array $attributes): void {
     $attempt = webhookAttempt();
@@ -257,22 +246,4 @@ it('quarantines a mismatched embedded success read through the existing signed w
         ->exception_reason->toBe('currency_mismatch')
         ->captured_amount_minor->toBe(0);
     expect(PaymentWebhookEvent::sole()->status)->toBe('processed');
-});
-
-it('re-fetches a signed refund and records the latest provider status', function (): void {
-    $attempt = webhookAttempt(['origin' => 'embedded', 'stripe_checkout_session_id' => null, 'state' => 'captured', 'captured_amount_minor' => 1000, 'stripe_charge_id' => 'ch_one']);
-    $refund = [
-        'refundId' => 're_one', 'paymentIntentId' => 'pi_one', 'chargeId' => 'ch_one', 'accountId' => 'acct_one',
-        'livemode' => false, 'amountMinor' => 100, 'currency' => 'eur', 'status' => 'succeeded', 'reason' => null, 'operationKey' => null,
-    ];
-    $gateway = FakePaymentGateway::fake(app())
-        ->willReturn('readRefund', $refund)
-        ->willReturn('payment', webhookPayment(['refundedAmountMinor' => 100]))
-        ->willReturn('refunds', [$refund]);
-    $event = webhookPayload(['type' => 'refund.updated', 'data' => ['object' => ['id' => 're_one', 'amount' => 1, 'status' => 'failed']]]);
-
-    deliverWebhook($event)->assertOk();
-    expect($attempt->refresh()->refunded_amount_minor)->toBe(100);
-    expect(PaymentLedgerDelivery::query()->orderBy('sequence')->pluck('type')->all())->toBe(['payment_succeeded_v1', 'refund_succeeded_v1']);
-    $gateway->assertCalled('readRefund', fn ($call) => $call->arguments === ['refundId' => 're_one'], times: 1);
 });

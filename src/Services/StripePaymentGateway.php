@@ -8,11 +8,13 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Nvl\Payments\Contracts\PaymentCustomerGateway;
 use Nvl\Payments\Contracts\PaymentIntentGateway;
 use Nvl\Payments\Contracts\PaymentRefundLookup;
 use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Exceptions\ProviderUnavailable;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
+use Stripe\Account;
 use Stripe\BalanceTransaction;
 use Stripe\Charge;
 use Stripe\Exception\ApiConnectionException;
@@ -34,7 +36,7 @@ use UnexpectedValueException;
  *
  * @internal
  */
-final class StripePaymentGateway implements PaymentIntentGateway, PaymentRefundLookup
+final class StripePaymentGateway implements PaymentCustomerGateway, PaymentIntentGateway, PaymentRefundLookup
 {
     public const string API_VERSION = '2026-10-28.endive';
 
@@ -246,6 +248,14 @@ final class StripePaymentGateway implements PaymentIntentGateway, PaymentRefundL
         }
 
         return $this->elementState($intent);
+    }
+
+    public function createCustomer(string $idempotencyKey): string
+    {
+        $options = $this->options($idempotencyKey);
+        $this->verifyAccount();
+
+        return $this->request('create_customer', fn () => $this->client->customers->create([], $options))->id;
     }
 
     /** @return StripeIntentState */

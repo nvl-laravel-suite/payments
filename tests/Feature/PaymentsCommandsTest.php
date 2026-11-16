@@ -26,20 +26,6 @@ it('reports readiness without printing secrets', function (): void {
     expect(json_decode($output, true, flags: JSON_THROW_ON_ERROR))->toHaveKey('checks');
 });
 
-it('fails strict readiness for an unapproved live key without contacting Stripe', function (): void {
-    setupRefundHost();
-    config([
-        'nvl-payments.stripe.secret' => 'rk_live_do_not_print',
-        'nvl-payments.stripe.livemode' => true,
-        'nvl-payments.stripe.webhook_secret' => 'whsec_private',
-        'nvl-payments.checkout.return_hosts' => ['shop.test'],
-    ]);
-    expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
-    $output = Artisan::output();
-    expect(json_decode($output, true, flags: JSON_THROW_ON_ERROR)['checks']['stripe_mode'])->toBeFalse()
-        ->and($output)->not->toContain('rk_live_do_not_print');
-});
-
 it('reconciles a target and a paginated sweep', function (): void {
     config(['nvl-payments.stripe.account_id' => 'acct_test', 'nvl-payments.reconciliation.batch_size' => 1]);
     $attempt = createRefundAttempt();
@@ -243,4 +229,18 @@ describe('local ledger readiness', function (): void {
             DB::purge('payments_doctor_replica');
         }
     });
+});
+
+it('fails strict readiness for an unapproved live key without contacting Stripe', function (): void {
+    setupRefundHost();
+    config([
+        'nvl-payments.stripe.secret' => 'rk_live_do_not_print',
+        'nvl-payments.stripe.livemode' => true,
+        'nvl-payments.stripe.webhook_secret' => 'whsec_private',
+        'nvl-payments.checkout.return_hosts' => ['shop.test'],
+    ]);
+    expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']))->toBe(1);
+    $output = Artisan::output();
+    expect(json_decode($output, true, flags: JSON_THROW_ON_ERROR)['checks']['stripe_mode'])->toBeFalse()
+        ->and($output)->not->toContain('rk_live_do_not_print');
 });
