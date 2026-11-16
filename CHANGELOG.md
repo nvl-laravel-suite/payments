@@ -5,6 +5,10 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Declare the `ext-ctype` and `symfony/http-foundation` runtime requirements already used by the webhook receiver, inbox and Doctor.
+
 ## [7.5.0] - 2026-11-16
 
 - Declare the supported and mockable Payments API and document its SemVer and deprecation policy.

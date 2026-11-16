@@ -95,6 +95,7 @@ final class PaymentsDoctor
             $checks += ['stripe_country' => false, 'stripe_default_currency' => false, 'stripe_webhook_registration' => false];
             if ($checks['enabled'] && $checks['stripe_mode'] && $checks['stripe_account']) {
                 try {
+                    /** @var PaymentGateway $gateway Hosts may bind fakes or other adapters. */
                     $gateway = app(PaymentGateway::class);
                     if ($gateway instanceof StripePaymentGateway) {
                         $checks = array_replace($checks, $gateway->inspectStripe(is_string($endpoint) && $endpoint !== '' ? $endpoint : null, PaymentWebhooks::eventTypes()));

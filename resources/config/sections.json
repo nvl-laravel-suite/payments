@@ -21,7 +21,7 @@
                 "embedded.capture_method",
                 "embedded.expires_in_minutes",
                 "migrations.allow_destructive_rollback",
-                "minimum_amounts",
+                "minimum_amounts.EUR",
                 "reconciliation.batch_size",
                 "reconciliation.max_attempts",
                 "refund_reasons",

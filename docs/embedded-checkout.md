@@ -139,7 +139,7 @@ Stripe remediation process. The checkout remains in exception for investigation.
 
 For signed-in shoppers, optionally enable `customers.enabled` and pass the
 trusted host customer reference as the fourth argument to `start()`. Scope
-that reference globally across tenants in this deployment. Guests omit it.
+that reference globally across owners in this deployment. Guests omit it.
 The package creates one Stripe customer mapping and reuses the stored ID without
 changing existing Stripe customer details.
 

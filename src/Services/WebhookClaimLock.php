@@ -21,7 +21,7 @@ final class WebhookClaimLock
     {
         $connection = PaymentsModelRegistry::newAttempt()->getConnection();
         $database = $connection->getDatabaseName();
-        if (! is_string($database)) {
+        if ($database === '') {
             throw new \LogicException('Payments inbox requires a named database.');
         }
         $table = PaymentsTables::get(PaymentsTables::WebhookInbox);

@@ -25,7 +25,7 @@ Configure the Stripe secret, account ID, live/test mode, Payments-specific webho
 Bind these host integration contracts before resolving payment services:
 
 - `PaymentOrderProvider::resolve($reference)` supplies a validated `OrderPaymentSnapshot` with server-calculated integer minor units, currency and revision.
-- `PaymentManagementAccess::assertCanManage($actor, $operation, $order)` enforces host permissions. Operation names are `start_checkout`, `recover_checkout`, `attach_existing`, `capture`, `cancel_authorization`, `refund`, `resolve_payment_exception` and `view`.
+- `PaymentManagementAccess::assertCanManage($actor, $operation, $order)` enforces host permissions. Operation names are `start_checkout`, `recover_checkout`, `attach_existing`, `capture`, `cancel_authorization`, `refund`, `resolve_payment_exception`, `view`, `start_embedded`, `settle_embedded`, `close_embedded` and `recover_embedded`.
 - `ExistingPaymentOwnership::assertOwned($order, $payment)` verifies trusted evidence linking an imported Stripe payment to the host order. `$payment` is the documented native fact array in `PaymentGateway`.
 
 Defaults deny until configured. Services reload canonical Eloquent actors before consulting host permissions; non-Eloquent identity freshness remains the host provider’s responsibility. `PaymentGateway` remains the replaceable Stripe integration boundary; provider discovery preserves host bindings.
@@ -40,7 +40,7 @@ Inject focused services from `Nvl\Payments\Services`. Consumers may wrap them in
 | `PaymentAuthorizations` | `capture`, `cancel` | Refreshed `PaymentAttempt` |
 | `PaymentRefunds` | `refund` | Refreshed `PaymentRefund` |
 | `PaymentReconciliation` | `reconcile`, `resolveException` | Refreshed `PaymentAttempt` |
-| `EmbeddedPayments` | `start($orderReference, $attemptUuid, $actor)` | Payment Element credentials |
+| `EmbeddedPayments` | `start($orderReference, $attemptUuid, $actor, $hostCustomerReference = null)` | Payment Element credentials |
 | `EmbeddedPayments` | `settle($attemptUuid, $actor)`, `recover($attemptUuid, $intentId, $actor)`, `close($attemptUuid, $actor)` | Attempt or confirmed-close boolean |
 | `PaymentWebhooks` | `enqueue($payload, $signature)`, `process($payload, $signature)` | `void` |
 | `PaymentReadService` | `forOrder($reference, $actor)` | Documented timeline array |
@@ -98,7 +98,7 @@ Run `nvl:payments:doctor --strict`, schedule `nvl:payments:reconcile`, and exerc
 
 Doctor checks the configured writer's required amount columns, positive payment/refund amounts, captured/refunded counter bounds, and live local refund reservations against the original payment total. Failed and canceled refunds release that reservation. These read-only checks return booleans, including on unavailable or incomplete sources; they neither enforce database constraints nor prove agreement with current Stripe state. Investigate failures through authorized private host tooling and reconciliation before allowing further financial effects.
 
-The creating migration's `down()` drops all four Payments tables, including operation journals and webhook replay receipts. Keep financial history under an explicit host retention and backup policy; use the recovery procedure in [UPGRADING.md](UPGRADING.md#financial-storage-retention-and-rollback) before any intentional database retirement. A routine application deployment rollback must preserve this storage.
+Payments migration rollbacks refuse unless `nvl-payments.migrations.allow_destructive_rollback` is `true`; with it, the creating migration's `down()` drops its four tables, including operation journals and webhook replay receipts. Keep financial history under an explicit host retention and backup policy; use the recovery procedure in [UPGRADING.md](UPGRADING.md#financial-storage-retention-and-rollback) before any intentional database retirement. A routine application deployment rollback must preserve this storage.
 
 ## Testing your app
 
