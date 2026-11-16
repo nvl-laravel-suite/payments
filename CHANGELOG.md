@@ -5,9 +5,17 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+## [7.5.0] - 2026-11-16
+
 - Declare the supported and mockable Payments API and document its SemVer and deprecation policy.
 - Verify the Stripe account and exact webhook registration through Doctor, and report queue configuration and inbox backlog.
 - Ship the host ledger contract kit, expand fake gateway coverage, and document checkout, deployment, replay and financial recovery.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- publish the stable API and Stripe diagnostics
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.4.0] - 2026-11-16
 
