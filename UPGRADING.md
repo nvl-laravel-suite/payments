@@ -1,5 +1,11 @@
 # Upgrading NVL Payments
 
+## 7.5.0 · Public API, Stripe diagnostics and integration guides
+
+Set `webhooks.url` to the exact registered public HTTPS URL and run `nvl:payments:doctor --strict --stripe --format=json` before enabling live acceptance. Configure the expected Stripe country and default currency when required.
+
+Use the [Payment Element integration](docs/embedded-checkout.md), [host ledger contract](docs/host-ledger.md), and [go-live and restore guide](docs/operations.md). The ledger contract kit exercises idempotency, replay and projection failure recovery against the host binding. [Stripe endpoint list](https://docs.stripe.com/api/webhook_endpoints/list) · [Stripe API versioning](https://docs.stripe.com/api/versioning)
+
 ## 7.4.0 · Stripe customers and signed webhook inbox
 
 Apply the additive customer and inbox migration. Set `webhooks.connection` and `webhooks.queue` for an asynchronous worker. Register the exact event allowlist from `PaymentWebhooks::eventTypes()` in Stripe. Schedule `nvl:payments:retry` for webhook and ledger recovery.

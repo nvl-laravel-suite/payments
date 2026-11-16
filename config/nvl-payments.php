@@ -20,6 +20,8 @@ return [
         'webhook_secret' => env('NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET'),
         'account_id' => env('NVL_PAYMENTS_STRIPE_ACCOUNT_ID'),
         'livemode' => false,
+        'country' => null,
+        'default_currency' => null,
     ],
     'allowed_currencies' => ['EUR'],
     'minimum_amounts' => ['EUR' => 50],
@@ -33,6 +35,7 @@ return [
     'webhooks' => [
         'route' => false,
         'path' => 'nvl/payments/stripe/webhook',
+        'url' => env('NVL_PAYMENTS_STRIPE_WEBHOOK_URL'),
         'connection' => null,
         'queue' => 'payments',
         'max_attempts' => 5,

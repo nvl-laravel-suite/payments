@@ -9,10 +9,12 @@ use Nvl\Payments\Services\PaymentsDoctor;
 
 /**
  * Renders the package-owned read-only installation diagnostics.
+ *
+ * @internal
  */
 final class PaymentsDoctorCommand extends Command
 {
-    protected $signature = 'nvl:payments:doctor {--strict} {--format=text}';
+    protected $signature = 'nvl:payments:doctor {--strict} {--stripe} {--format=text}';
 
     protected $description = 'Check local Payments configuration, schema, and webhook readiness';
 
@@ -26,15 +28,18 @@ final class PaymentsDoctorCommand extends Command
 
             return self::FAILURE;
         }
-        $checks = $doctor->inspect();
+        $checks = $doctor->inspect((bool) $this->option('stripe'));
+        $backlog = $doctor->inboxBacklog();
 
         if ($format === 'json') {
-            $this->line(json_encode(['checks' => $checks], JSON_THROW_ON_ERROR));
+            $this->line(json_encode(['checks' => $checks, 'inbox' => $backlog], JSON_THROW_ON_ERROR));
         } else {
             foreach ($checks as $name => $ready) {
                 $this->line($name.': '.($ready ? 'ready' : 'missing or invalid'));
             }
-            $this->line('Stripe endpoint registration and delivery must be verified in Stripe.');
+            foreach ($backlog as $status => $count) {
+                $this->line('inbox '.$status.': '.$count);
+            }
         }
 
         return $this->option('strict') && in_array(false, $checks, true) ? self::FAILURE : self::SUCCESS;

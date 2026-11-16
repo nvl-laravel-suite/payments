@@ -26,6 +26,8 @@
                 "reconciliation.max_attempts",
                 "refund_reasons",
                 "stripe.account_id",
+                "stripe.country",
+                "stripe.default_currency",
                 "stripe.livemode",
                 "stripe.publishable_key",
                 "stripe.secret",
@@ -35,7 +37,8 @@
                 "webhooks.path",
                 "webhooks.queue",
                 "webhooks.route",
-                "webhooks.stale_after_minutes"
+                "webhooks.stale_after_minutes",
+                "webhooks.url"
             ]
         }
     }

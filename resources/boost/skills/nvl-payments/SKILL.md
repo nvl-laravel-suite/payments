@@ -1,6 +1,6 @@
 ---
 name: nvl-payments
-description: Use when integrating one-time Stripe order payments with nvl/payments, including hosted Checkout, manual capture, cancellation, refunds, verified webhooks, recovery and authorized timelines.
+description: Use when integrating one-time Stripe order payments with nvl/payments, including Payment Element, hosted Checkout, manual capture, cancellation, refunds, verified webhooks, recovery and authorized timelines.
 ---
 
 # NVL Payments
@@ -31,13 +31,15 @@ Enable Payments only when its schema and bindings are ready.
 
 ## Choose the complete operation
 
+- `EmbeddedPayments::start` / `settle` / `close` / `recover`: run the Payment Element lifecycle with a stable host attempt UUID.
 - `PaymentCheckout::start`: reserve or reuse an exact hosted checkout.
 - `PaymentCheckout::recover`: recover a stored attempt using a Stripe session identity.
 - `PaymentCheckout::attach`: import a provider payment only after explicit host ownership evidence.
 - `PaymentAuthorizations::capture` / `cancel`: settle or cancel an authorization.
 - `PaymentRefunds::refund`: reserve balance and issue an idempotent refund.
 - `PaymentReconciliation::reconcile` / `resolveException`: synchronize facts or explicitly accept an exception.
-- `PaymentWebhooks::process`: verify untouched signed request bytes and deduplicate.
+- `PaymentWebhooks::enqueue` / `process`: verify untouched signed request bytes and deduplicate.
+- `PaymentLedgerProjector`: mirror versioned payment and refund facts after commit.
 - `PaymentReadService::forOrder`: authorized, bounded timeline facts.
 
 ## Keep financial recovery intact

@@ -746,6 +746,17 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Testing\\PaymentLedgerContractKit": {
+            "kind": "class",
+            "file": "src/Testing/PaymentLedgerContractKit.php",
+            "methods": [
+                "assertFailureIsRetryable",
+                "assertIdempotent",
+                "assertReplay"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\ValueObjects\\OrderPaymentSnapshot": {
             "kind": "class",
             "file": "src/ValueObjects/OrderPaymentSnapshot.php",

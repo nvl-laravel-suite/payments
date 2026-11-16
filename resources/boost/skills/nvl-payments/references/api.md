@@ -7,10 +7,14 @@ Search for the relevant fully qualified service or contract and read only its ma
 ## Symbols
 
 - `Nvl\Payments\Contracts\ExistingPaymentOwnership`
+- `Nvl\Payments\Contracts\PaymentCustomerGateway`
 - `Nvl\Payments\Contracts\PaymentGateway`
+- `Nvl\Payments\Contracts\PaymentIntentGateway`
+- `Nvl\Payments\Contracts\PaymentLedgerProjector`
 - `Nvl\Payments\Contracts\PaymentManagementAccess`
 - `Nvl\Payments\Contracts\PaymentOrderProvider`
 - `Nvl\Payments\Contracts\PaymentOwnerWorklist`
+- `Nvl\Payments\Contracts\PaymentRefundLookup`
 - `Nvl\Payments\Database\Factories\PaymentAttemptFactory`
 - `Nvl\Payments\Database\Factories\PaymentOperationFactory`
 - `Nvl\Payments\Database\Factories\PaymentRefundFactory`
@@ -18,18 +22,34 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Payments\Enums\PaymentsResponseCode`
 - `Nvl\Payments\Events\PaymentStateChanged`
 - `Nvl\Payments\Exceptions\PaymentsException`
+- `Nvl\Payments\Exceptions\ProviderRefused`
+- `Nvl\Payments\Exceptions\ProviderUnavailable`
+- `Nvl\Payments\Http\RequirePaymentWebhookSecret`
+- `Nvl\Payments\Ledger\PaymentCanceled`
+- `Nvl\Payments\Ledger\PaymentExceptionRaised`
+- `Nvl\Payments\Ledger\PaymentFailed`
+- `Nvl\Payments\Ledger\PaymentLedgerFact`
+- `Nvl\Payments\Ledger\PaymentSucceeded`
+- `Nvl\Payments\Ledger\RefundCanceled`
+- `Nvl\Payments\Ledger\RefundFailed`
+- `Nvl\Payments\Ledger\RefundPending`
+- `Nvl\Payments\Ledger\RefundSucceeded`
 - `Nvl\Payments\Models\PaymentAttempt`
 - `Nvl\Payments\Models\PaymentOperation`
 - `Nvl\Payments\Models\PaymentRefund`
 - `Nvl\Payments\Models\PaymentWebhookEvent`
+- `Nvl\Payments\Services\EmbeddedPayments`
 - `Nvl\Payments\Services\PaymentAuthorizations`
 - `Nvl\Payments\Services\PaymentCheckout`
+- `Nvl\Payments\Services\PaymentLedgerDelivery`
 - `Nvl\Payments\Services\PaymentReadService`
 - `Nvl\Payments\Services\PaymentReconciliation`
 - `Nvl\Payments\Services\PaymentRefunds`
 - `Nvl\Payments\Services\PaymentWebhooks`
+- `Nvl\Payments\Services\PaymentsAvailability`
 - `Nvl\Payments\Services\PaymentsModelRegistry`
 - `Nvl\Payments\Testing\FakePaymentGateway`
+- `Nvl\Payments\Testing\PaymentLedgerContractKit`
 - `Nvl\Payments\ValueObjects\OrderPaymentSnapshot`
 
 ## Nvl\Payments\Contracts\ExistingPaymentOwnership
@@ -38,7 +58,14 @@ Search for the relevant fully qualified service or contract and read only its ma
 interface Nvl\Payments\Contracts\ExistingPaymentOwnership
 public abstract function assertOwned(Nvl\Payments\ValueObjects\OrderPaymentSnapshot $order, array $payment): void
 @param StripePaymentState $payment
-resolved @param array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string} $payment
+resolved @param array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string} $payment
+```
+
+## Nvl\Payments\Contracts\PaymentCustomerGateway
+
+```text
+interface Nvl\Payments\Contracts\PaymentCustomerGateway
+public abstract function createCustomer(string $idempotencyKey): string
 ```
 
 ## Nvl\Payments\Contracts\PaymentGateway
@@ -47,10 +74,10 @@ resolved @param array{paymentIntentId: ?string, chargeId: ?string, accountId: st
 interface Nvl\Payments\Contracts\PaymentGateway
 public abstract function cancel(string $paymentIntentId, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public abstract function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public abstract function checkout(string $sessionId): array
 @return StripeCheckoutState
 resolved @return array{sessionId: string, paymentIntentId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, paymentStatus: string, orderReference: ?string, orderRevision: ?string, expiresAt: Carbon\CarbonImmutable, operationKey: ?string, url: ?string}
@@ -60,16 +87,61 @@ resolved @return array{sessionId: string, url: string, expiresAt: Carbon\CarbonI
 public abstract function expireCheckout(string $sessionId, string $idempotencyKey): void
 public abstract function payment(string $paymentReference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public abstract function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
 @return StripeRefundState
-resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}
+resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}
 public abstract function refunds(string $paymentId): array
 @return list<StripeRefundState>
-resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}>
+resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}>
 public abstract function resolveExisting(string $reference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+```
+
+## Nvl\Payments\Contracts\PaymentIntentGateway
+
+```text
+interface Nvl\Payments\Contracts\PaymentIntentGateway extends Nvl\Payments\Contracts\PaymentGateway
+public abstract function cancel(string $paymentIntentId, string $idempotencyKey): array
+@return StripePaymentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public abstract function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
+@return StripePaymentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public abstract function checkout(string $sessionId): array
+@return StripeCheckoutState
+resolved @return array{sessionId: string, paymentIntentId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, paymentStatus: string, orderReference: ?string, orderRevision: ?string, expiresAt: Carbon\CarbonImmutable, operationKey: ?string, url: ?string}
+public abstract function createCheckout(Nvl\Payments\ValueObjects\OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, Carbon\CarbonImmutable $expiresAt, string $idempotencyKey): array
+@return HostedCheckout
+resolved @return array{sessionId: string, url: string, expiresAt: Carbon\CarbonImmutable}
+public abstract function createIntent(Nvl\Payments\ValueObjects\OrderPaymentSnapshot $order, string $captureMethod, array $allowedMethods, ?string $customerId, string $idempotencyKey): array
+@param list<string> $allowedMethods
+@return StripeIntentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public abstract function expireCheckout(string $sessionId, string $idempotencyKey): void
+public abstract function intent(string $intentId): array
+@return StripeIntentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public abstract function payment(string $paymentReference): array
+@return StripePaymentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public abstract function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
+@return StripeRefundState
+resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}
+public abstract function refunds(string $paymentId): array
+@return list<StripeRefundState>
+resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}>
+public abstract function resolveExisting(string $reference): array
+@return StripePaymentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+```
+
+## Nvl\Payments\Contracts\PaymentLedgerProjector
+
+```text
+interface Nvl\Payments\Contracts\PaymentLedgerProjector
+public abstract function project(Nvl\Payments\Ledger\PaymentLedgerFact $fact): void
 ```
 
 ## Nvl\Payments\Contracts\PaymentManagementAccess
@@ -93,6 +165,15 @@ interface Nvl\Payments\Contracts\PaymentOwnerWorklist
 public abstract function owners(?string $attemptId, int $limit): iterable
 @return iterable<OwnerReference>
 resolved @return iterable<Nvl\Support\Ownership\ValueObjects\OwnerReference>
+```
+
+## Nvl\Payments\Contracts\PaymentRefundLookup
+
+```text
+interface Nvl\Payments\Contracts\PaymentRefundLookup
+public abstract function readRefund(string $refundId): array
+@return StripeRefundState
+resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}
 ```
 
 ## Nvl\Payments\Database\Factories\PaymentAttemptFactory
@@ -204,6 +285,225 @@ public function translationParameters(): array
 @return array<string, (scalar | null)>
 ```
 
+## Nvl\Payments\Exceptions\ProviderRefused
+
+```text
+class Nvl\Payments\Exceptions\ProviderRefused extends Nvl\Payments\Exceptions\PaymentsException
+public function __construct(?string $stripeCode, ?int $httpStatus=null): mixed
+public static function because(Nvl\Payments\Enums\PaymentsResponseCode $code, string $diagnosticMessage, array $publicContext=[], ?Throwable $previous=null): self
+@param array<string, mixed> $publicContext
+public function package(): string
+public function publicContext(): array
+@return array<string, mixed>
+public function responseCode(): ?string
+public function responseHeaders(): array
+@return array<string, string>
+public function suggestedStatus(): int
+public function translationKey(): ?string
+public function translationParameters(): array
+@return array<string, (scalar | null)>
+public readonly ?int $httpStatus
+public readonly ?string $stripeCode
+```
+
+## Nvl\Payments\Exceptions\ProviderUnavailable
+
+```text
+class Nvl\Payments\Exceptions\ProviderUnavailable extends Nvl\Payments\Exceptions\PaymentsException
+public function __construct(?string $stripeCode=null, ?int $httpStatus=null): mixed
+public static function because(Nvl\Payments\Enums\PaymentsResponseCode $code, string $diagnosticMessage, array $publicContext=[], ?Throwable $previous=null): self
+@param array<string, mixed> $publicContext
+public function package(): string
+public function publicContext(): array
+@return array<string, mixed>
+public function responseCode(): ?string
+public function responseHeaders(): array
+@return array<string, string>
+public function suggestedStatus(): int
+public function translationKey(): ?string
+public function translationParameters(): array
+@return array<string, (scalar | null)>
+public readonly ?int $httpStatus
+public readonly ?string $stripeCode
+```
+
+## Nvl\Payments\Http\RequirePaymentWebhookSecret
+
+```text
+class Nvl\Payments\Http\RequirePaymentWebhookSecret
+public function handle(Illuminate\Http\Request $request, Closure $next): Symfony\Component\HttpFoundation\Response
+@param Closure(Request): Response $next
+resolved @param Closure(Illuminate\Http\Request): Symfony\Component\HttpFoundation\Response $next
+```
+
+## Nvl\Payments\Ledger\PaymentCanceled
+
+```text
+readonly class Nvl\Payments\Ledger\PaymentCanceled implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+```
+
+## Nvl\Payments\Ledger\PaymentExceptionRaised
+
+```text
+readonly class Nvl\Payments\Ledger\PaymentExceptionRaised implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, string $reason, int $expectedAmountMinor, string $expectedCurrency): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly int $expectedAmountMinor
+public readonly string $expectedCurrency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+public readonly string $reason
+```
+
+## Nvl\Payments\Ledger\PaymentFailed
+
+```text
+readonly class Nvl\Payments\Ledger\PaymentFailed implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, ?string $failureCode): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly ?string $failureCode
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+```
+
+## Nvl\Payments\Ledger\PaymentLedgerFact
+
+```text
+interface Nvl\Payments\Ledger\PaymentLedgerFact
+public abstract function id(): string
+```
+
+## Nvl\Payments\Ledger\PaymentSucceeded
+
+```text
+readonly class Nvl\Payments\Ledger\PaymentSucceeded implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, ?string $cardBrand, ?string $cardLastFour, ?int $cardExpiryMonth, ?int $cardExpiryYear, ?string $wallet): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $cardBrand
+public readonly ?int $cardExpiryMonth
+public readonly ?int $cardExpiryYear
+public readonly ?string $cardLastFour
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+public readonly ?string $wallet
+```
+
+## Nvl\Payments\Ledger\RefundCanceled
+
+```text
+readonly class Nvl\Payments\Ledger\RefundCanceled implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, string $refundId, string $operationId, ?string $reason, string $providerStatus): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $operationId
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+public readonly string $providerStatus
+public readonly ?string $reason
+public readonly string $refundId
+```
+
+## Nvl\Payments\Ledger\RefundFailed
+
+```text
+readonly class Nvl\Payments\Ledger\RefundFailed implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, string $refundId, string $operationId, ?string $reason, string $providerStatus): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $operationId
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+public readonly string $providerStatus
+public readonly ?string $reason
+public readonly string $refundId
+```
+
+## Nvl\Payments\Ledger\RefundPending
+
+```text
+readonly class Nvl\Payments\Ledger\RefundPending implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, string $refundId, string $operationId, ?string $reason, string $providerStatus): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $operationId
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+public readonly string $providerStatus
+public readonly ?string $reason
+public readonly string $refundId
+```
+
+## Nvl\Payments\Ledger\RefundSucceeded
+
+```text
+readonly class Nvl\Payments\Ledger\RefundSucceeded implements Nvl\Payments\Ledger\PaymentLedgerFact
+public function __construct(string $id, string $attemptReference, string $orderReference, int $amountMinor, string $currency, ?string $intentId, ?string $chargeId, bool $livemode, ?int $providerOccurredAt, string $refundId, string $operationId, ?string $reason, string $providerStatus): mixed
+public function id(): string
+public readonly int $amountMinor
+public readonly string $attemptReference
+public readonly ?string $chargeId
+public readonly string $currency
+public readonly string $id
+public readonly ?string $intentId
+public readonly bool $livemode
+public readonly string $operationId
+public readonly string $orderReference
+public readonly ?int $providerOccurredAt
+public readonly string $providerStatus
+public readonly ?string $reason
+public readonly string $refundId
+```
+
 ## Nvl\Payments\Models\PaymentAttempt
 
 ```text
@@ -229,10 +529,18 @@ public function save(array $options=[]): bool
 @property int $amount_minor
 @property (string | null) $capture_method
 @property int $captured_amount_minor
+@property (string | null) $card_brand
+@property (int | null) $card_expiry_month
+@property (int | null) $card_expiry_year
+@property (string | null) $card_last_four
+@property (string | null) $card_wallet
 @property (string | null) $checkout_url
 @property (Carbon | null) $created_at
 resolved @property (Illuminate\Support\Carbon | null) $created_at
 @property string $currency
+@property (string | null) $embedded_customer
+@property (list<string> | null) $embedded_methods
+@property (string | null) $exception_reason
 @property (Carbon | null) $expires_at
 resolved @property (Illuminate\Support\Carbon | null) $expires_at
 @property string $id
@@ -260,7 +568,7 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 ## Nvl\Payments\Models\PaymentOperation
 
 ```text
-final class Nvl\Payments\Models\PaymentOperation extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
+class Nvl\Payments\Models\PaymentOperation extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
 public const string TABLE=\Nvl\Payments\Definitions\Tables\PaymentsTables::Operations
 public function delete(): mixed
 @return ($this is Pivot ? (bool | int | null) : (bool | null))
@@ -331,12 +639,14 @@ resolved @property (Illuminate\Support\Carbon | null) $created_at
 @property (string | null) $internal_note
 @property (Carbon | null) $last_synced_at
 resolved @property (Illuminate\Support\Carbon | null) $last_synced_at
+@property int $ledger_transition
 @property (string | null) $owner_reference
 @property string $owner_scope_key
 @property string $payment_attempt_id
 @property string $payment_operation_id
 @property (string | null) $reason
 @property string $status
+@property (string | null) $stripe_reason
 @property (string | null) $stripe_refund_id
 @property (Carbon | null) $updated_at
 resolved @property (Illuminate\Support\Carbon | null) $updated_at
@@ -345,7 +655,7 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 ## Nvl\Payments\Models\PaymentWebhookEvent
 
 ```text
-final class Nvl\Payments\Models\PaymentWebhookEvent extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
+class Nvl\Payments\Models\PaymentWebhookEvent extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
 public const string TABLE=\Nvl\Payments\Definitions\Tables\PaymentsTables::WebhookEvents
 public function delete(): mixed
 @return ($this is Pivot ? (bool | int | null) : (bool | null))
@@ -381,10 +691,23 @@ resolved @property (Illuminate\Support\Carbon | null) $processed_at
 resolved @property (Illuminate\Support\Carbon | null) $updated_at
 ```
 
+## Nvl\Payments\Services\EmbeddedPayments
+
+```text
+class Nvl\Payments\Services\EmbeddedPayments
+public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Contracts\PaymentIntentGateway $gateway, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\PaymentOrderOwnership $scope, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\PaymentReconciliation $reconciliation, ?Nvl\Payments\Services\PaymentCustomers $customers=null): mixed
+public function close(string $attemptReference, Illuminate\Contracts\Auth\Authenticatable $actor): bool
+public function recover(string $attemptReference, string $intentId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
+public function settle(string $attemptReference, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
+public function start(string $orderReference, string $attemptReference, Illuminate\Contracts\Auth\Authenticatable $actor, ?string $hostCustomerReference=null): array
+@return EmbeddedCheckout
+resolved @return array{intentId: string, clientSecret: string, publishableKey: string, status: string, expiresAt: Carbon\CarbonImmutable}
+```
+
 ## Nvl\Payments\Services\PaymentAuthorizations
 
 ```text
-final class Nvl\Payments\Services\PaymentAuthorizations
+class Nvl\Payments\Services\PaymentAuthorizations
 public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\PaymentOrderOwnership $scope): mixed
 public function cancel(Nvl\Payments\Models\PaymentAttempt|string $attempt, string $operationId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
 public function capture(Nvl\Payments\Models\PaymentAttempt|string $attempt, int $amountMinor, string $operationId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
@@ -393,8 +716,8 @@ public function capture(Nvl\Payments\Models\PaymentAttempt|string $attempt, int 
 ## Nvl\Payments\Services\PaymentCheckout
 
 ```text
-final class Nvl\Payments\Services\PaymentCheckout
-public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Contracts\ExistingPaymentOwnership $ownership, Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\PaymentReconciliation $reconciler, Nvl\Payments\Services\PaymentOrderOwnership $scope): mixed
+class Nvl\Payments\Services\PaymentCheckout
+public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Contracts\ExistingPaymentOwnership $ownership, Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\PaymentReconciliation $reconciler, Nvl\Payments\Services\PaymentOrderOwnership $scope, ?Nvl\Payments\Services\PaymentLedgerOutbox $outbox=null): mixed
 public function attach(string $orderReference, string $stripeReference, string $operationId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
 public function recover(Nvl\Payments\Models\PaymentAttempt|string $attempt, string $stripeSessionId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
 public function start(string $orderReference, Illuminate\Contracts\Auth\Authenticatable $actor, string $successUrl, string $cancelUrl): array
@@ -402,21 +725,29 @@ public function start(string $orderReference, Illuminate\Contracts\Auth\Authenti
 resolved @return array{sessionId: string, url: string, expiresAt: Carbon\CarbonImmutable}
 ```
 
+## Nvl\Payments\Services\PaymentLedgerDelivery
+
+```text
+class Nvl\Payments\Services\PaymentLedgerDelivery
+public function deliver(string $id, bool $replay=false): bool
+public function retry(int $limit=100): int
+```
+
 ## Nvl\Payments\Services\PaymentReadService
 
 ```text
-final class Nvl\Payments\Services\PaymentReadService
+class Nvl\Payments\Services\PaymentReadService
 public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Services\PaymentProjection $projection, Nvl\Payments\Services\PaymentOrderOwnership $scope): mixed
 public function forOrder(string $orderReference, Illuminate\Contracts\Auth\Authenticatable $actor): array
 @return array{orderReference: string, payments: list<PaymentSnapshot>, refunds: list<RefundSnapshot>}
-resolved @return array{orderReference: string, payments: list<array{attemptId: string, orderReference: string, orderRevision: string, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, origin: string, checkoutSessionId: ?string, paymentIntentId: ?string, chargeId: ?string, accountId: ?string, livemode: ?bool, captureMethod: ?string, expiresAt: ?Carbon\CarbonImmutable, lastSyncedAt: ?Carbon\CarbonImmutable, reservedRefundAmountMinor: int, refundableAmountMinor: int}>, refunds: list<array{refundId: string, paymentAttemptId: string, operationId: string, amountMinor: int, currency: string, reason: ?string, status: string, stripeRefundId: ?string, lastSyncedAt: ?Carbon\CarbonImmutable}>}
+resolved @return array{orderReference: string, payments: list<array{attemptId: string, orderReference: string, orderRevision: string, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, currency: string, status: string, exceptionReason: ?string, origin: string, checkoutSessionId: ?string, paymentIntentId: ?string, chargeId: ?string, cardBrand: ?string, cardLastFour: ?string, cardExpiryMonth: ?int, cardExpiryYear: ?int, wallet: ?string, accountId: ?string, livemode: ?bool, captureMethod: ?string, expiresAt: ?Carbon\CarbonImmutable, lastSyncedAt: ?Carbon\CarbonImmutable, reservedRefundAmountMinor: int, refundableAmountMinor: int}>, refunds: list<array{refundId: string, paymentAttemptId: string, operationId: string, amountMinor: int, currency: string, reason: ?string, status: string, stripeRefundId: ?string, lastSyncedAt: ?Carbon\CarbonImmutable}>}
 ```
 
 ## Nvl\Payments\Services\PaymentReconciliation
 
 ```text
-final class Nvl\Payments\Services\PaymentReconciliation
-public function __construct(Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\RefundBalance $balance, Nvl\Payments\Ownership\PaymentsIntegrityGuard $integrity, Nvl\Payments\Services\PaymentRefundWriter $refundWriter, Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Services\PaymentOrderOwnership $scope, ?Nvl\Support\Events\DomainEventDispatcher $domainEvents=null): mixed
+class Nvl\Payments\Services\PaymentReconciliation
+public function __construct(Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\RefundBalance $balance, Nvl\Payments\Ownership\PaymentsIntegrityGuard $integrity, Nvl\Payments\Services\PaymentRefundWriter $refundWriter, Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Services\PaymentOrderOwnership $scope, ?Nvl\Support\Events\DomainEventDispatcher $domainEvents=null, ?Nvl\Payments\Services\PaymentLedgerOutbox $outbox=null): mixed
 public function reconcile(Nvl\Payments\Models\PaymentAttempt|string $attempt, ?string $recoverySessionId=null): Nvl\Payments\Models\PaymentAttempt
 public function resolveException(Nvl\Payments\Models\PaymentAttempt|string $attempt, string $operationId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentAttempt
 ```
@@ -424,23 +755,33 @@ public function resolveException(Nvl\Payments\Models\PaymentAttempt|string $atte
 ## Nvl\Payments\Services\PaymentRefunds
 
 ```text
-final class Nvl\Payments\Services\PaymentRefunds
-public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\RefundBalance $balance, Nvl\Payments\Services\PaymentOrderOwnership $scope, Nvl\Payments\Services\PaymentRefundWriter $refundWriter): mixed
+class Nvl\Payments\Services\PaymentRefunds
+public function __construct(Nvl\Payments\Contracts\PaymentOrderProvider $orders, Nvl\Payments\Contracts\PaymentManagementAccess $access, Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentOperationJournal $journal, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Services\RefundBalance $balance, Nvl\Payments\Services\PaymentOrderOwnership $scope, Nvl\Payments\Services\PaymentRefundWriter $refundWriter, ?Nvl\Payments\Services\PaymentLedgerOutbox $outbox=null): mixed
 public function refund(Nvl\Payments\Models\PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Illuminate\Contracts\Auth\Authenticatable $actor): Nvl\Payments\Models\PaymentRefund
 ```
 
 ## Nvl\Payments\Services\PaymentWebhooks
 
 ```text
-final class Nvl\Payments\Services\PaymentWebhooks
-public function __construct(Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Ownership\PaymentsProviderAdmission $ownership): mixed
+class Nvl\Payments\Services\PaymentWebhooks
+public function __construct(Nvl\Payments\Contracts\PaymentGateway $gateway, Nvl\Payments\Services\PaymentStateSyncer $syncer, Nvl\Payments\Ownership\PaymentsProviderAdmission $ownership, ?Nvl\Payments\Services\PaymentReconciliation $reconciliation=null, ?Nvl\Payments\Services\PaymentWebhookInbox $inbox=null): mixed
+public function enqueue(#[SensitiveParameter()] string $payload, #[SensitiveParameter()] string $signature): void
+public static function eventTypes(): array
+@return list<string>
 public function process(#[SensitiveParameter()] string $payload, #[SensitiveParameter()] string $signature): void
+```
+
+## Nvl\Payments\Services\PaymentsAvailability
+
+```text
+class Nvl\Payments\Services\PaymentsAvailability
+public function acceptsPayments(): bool
 ```
 
 ## Nvl\Payments\Services\PaymentsModelRegistry
 
 ```text
-final class Nvl\Payments\Services\PaymentsModelRegistry
+class Nvl\Payments\Services\PaymentsModelRegistry
 public function __construct(Illuminate\Contracts\Config\Repository $configuration, Nvl\Support\OwnerRegistry $identities): mixed
 public function attemptModel(): string
 @return class-string<PaymentAttempt>
@@ -454,7 +795,7 @@ resolved @return class-string<Nvl\Payments\Models\PaymentRefund>
 ## Nvl\Payments\Testing\FakePaymentGateway
 
 ```text
-final class Nvl\Payments\Testing\FakePaymentGateway implements Nvl\Payments\Contracts\PaymentGateway
+class Nvl\Payments\Testing\FakePaymentGateway implements Nvl\Payments\Contracts\PaymentCustomerGateway, Nvl\Payments\Contracts\PaymentIntentGateway, Nvl\Payments\Contracts\PaymentRefundLookup
 public function assertCalled(string $method, ?Closure $predicate=null, int $times=1): void
 @param (Closure(FakeCall): bool | null) $predicate
 resolved @param (Closure(Nvl\Support\Testing\FakeCall): bool | null) $predicate
@@ -463,32 +804,56 @@ public function calls(?string $method=null): array
 resolved @return list<Nvl\Support\Testing\FakeCall>
 public function cancel(string $paymentIntentId, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public function capture(string $paymentIntentId, int $amountMinor, string $idempotencyKey): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public function checkout(string $sessionId): array
 @return StripeCheckoutState
 resolved @return array{sessionId: string, paymentIntentId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, paymentStatus: string, orderReference: ?string, orderRevision: ?string, expiresAt: Carbon\CarbonImmutable, operationKey: ?string, url: ?string}
 public function createCheckout(Nvl\Payments\ValueObjects\OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, Carbon\CarbonImmutable $expiresAt, string $idempotencyKey): array
 @return HostedCheckout
 resolved @return array{sessionId: string, url: string, expiresAt: Carbon\CarbonImmutable}
+public function createCustomer(string $idempotencyKey): string
+public function createIntent(Nvl\Payments\ValueObjects\OrderPaymentSnapshot $order, string $captureMethod, array $allowedMethods, ?string $customerId, string $idempotencyKey): array
+@return StripeIntentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public function deliverWebhook(Nvl\Payments\Services\PaymentWebhooks $webhooks, array $event, #[SensitiveParameter()] ?string $secret=null, ?int $timestamp=null): void
+@param array<string, mixed> $event
 public function expireCheckout(string $sessionId, string $idempotencyKey): void
 public static function fake(Illuminate\Contracts\Container\Container $container): self
+public function intent(string $intentId): array
+@return StripeIntentState
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public function payment(string $paymentReference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
+public function readRefund(string $refundId): array
+@return StripeRefundState
+resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}
 public function refund(string $paymentId, int $amountMinor, string $reason, string $idempotencyKey): array
 @return StripeRefundState
-resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}
+resolved @return array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}
 public function refunds(string $paymentId): array
 @return list<StripeRefundState>
-resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string}>
+resolved @return list<array{refundId: string, paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, currency: string, status: string, reason: ?string, operationKey: ?string, providerOccurredAt?: ?int}>
 public function resolveExisting(string $reference): array
 @return StripePaymentState
-resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string}
+resolved @return array{paymentIntentId: ?string, chargeId: ?string, accountId: string, livemode: bool, amountMinor: int, capturedAmountMinor: int, refundedAmountMinor: int, releasedHoldRefundIds?: list<string>, currency: string, status: string, captureMethod: string, amountCapturableMinor: ?int, paymentMethodType: ?string, partialAuthorizationStatus: ?string, cardBrand?: ?string, cardLastFour?: ?string, cardExpiryMonth?: ?int, cardExpiryYear?: ?int, wallet?: ?string, providerOccurredAt?: ?int, failureCode?: ?string, failureReference?: ?string, clientSecret?: ?string, operationKey?: ?string}
 public function willReturn(string $method, mixed $value): static
 public function willThrow(string $method, Throwable $exception): static
+```
+
+## Nvl\Payments\Testing\PaymentLedgerContractKit
+
+```text
+class Nvl\Payments\Testing\PaymentLedgerContractKit
+public function assertFailureIsRetryable(Nvl\Payments\Services\PaymentLedgerDelivery $delivery, string $id, Throwable $expected, Closure $allowDelivery): void
+@param Closure(): void $allowDelivery
+public function assertIdempotent(Nvl\Payments\Contracts\PaymentLedgerProjector $projector, Nvl\Payments\Ledger\PaymentLedgerFact $fact, Closure $countEffects): void
+@param Closure(string): int $countEffects
+public function assertReplay(Nvl\Payments\Services\PaymentLedgerDelivery $delivery, string $id, Closure $observedIds): void
+@param Closure(): list<string> $observedIds
 ```
 
 ## Nvl\Payments\ValueObjects\OrderPaymentSnapshot

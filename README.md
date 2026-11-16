@@ -1,14 +1,24 @@
 # NVL Payments
 
+Use the [Payment Element integration](docs/embedded-checkout.md) to build a host
+checkout, [host ledger contract](docs/host-ledger.md) for payment and refund
+mirroring, and [deployment and recovery guide](docs/operations.md) for Stripe
+setup and operations.
+
+The supported PHP surface is marked `@api`. Public contracts follow SemVer.
+Breaking changes require a major release and at least one minor release of
+published deprecation notice.
+
+
 Standalone Stripe order payments for PHP 8.4 and Laravel 13. Install Payments separately from the suite metapackage. It requires Core and Stripe PHP; Billing, Cashier, Tenancy and application DTO libraries are not required.
 
-The host owns orders, prices, permissions, fulfillment and HTTP. Payments owns hosted Checkout, embedded Payment Element, authorization, refund reservations, signed delivery processing, ledger delivery and durable operation journals.
+The host owns orders, prices, permissions, fulfillment and HTTP. Payments owns hosted and embedded checkout, authorization, refund reservations, signed webhook intake, ledger delivery and durable operation journals.
 
 ## Setup
 
 Publish `nvl-payments-config` and choose one migration source. Vendor migrations require `nvl-payments.migrations.enabled=true`; published migrations require that option to remain false. Keep `nvl-payments.enabled=false` until schema, Stripe configuration and host adapters are ready.
 
-Configure the Stripe secret, account ID, live/test mode, Payments-specific webhook secret, allowed currencies and HTTPS checkout return hosts. Live credentials require `nvl-payments.allow_live=true`. EUR is accepted by default with a minimum of 50 minor units. `PaymentsAvailability::acceptsPayments()` checks local enablement, account configuration and credential mode. Tables use the canonical `nvl_payments_*` defaults and `nvl-payments.connection` selects the configured connection.
+Configure the Stripe secret, account ID, live/test mode, Payments-specific webhook secret, allowed currencies and HTTPS checkout return hosts. Tables use the canonical `nvl_payments_*` defaults and `nvl-payments.connection` selects the configured connection.
 
 ## Required bindings
 
@@ -27,11 +37,12 @@ Inject focused services from `Nvl\Payments\Services`. Consumers may wrap them in
 | Service | Operations | Results |
 | --- | --- | --- |
 | `PaymentCheckout` | `start`, `recover`, `attach` | Hosted checkout fact array; `PaymentAttempt` for recovery/attachment |
-| `EmbeddedPayments` | `start`, `settle`, `close`, `recover` | Payment Element credentials, authoritative `PaymentAttempt` or confirmed cancellation |
 | `PaymentAuthorizations` | `capture`, `cancel` | Refreshed `PaymentAttempt` |
 | `PaymentRefunds` | `refund` | Refreshed `PaymentRefund` |
 | `PaymentReconciliation` | `reconcile`, `resolveException` | Refreshed `PaymentAttempt` |
-| `PaymentWebhooks` | `process($payload, $signature)` | `void` |
+| `EmbeddedPayments` | `start($orderReference, $attemptUuid, $actor)` | Payment Element credentials |
+| `EmbeddedPayments` | `settle($attemptUuid, $actor)`, `recover($attemptUuid, $intentId, $actor)`, `close($attemptUuid, $actor)` | Attempt or confirmed-close boolean |
+| `PaymentWebhooks` | `enqueue($payload, $signature)`, `process($payload, $signature)` | `void` |
 | `PaymentReadService` | `forOrder($reference, $actor)` | Documented timeline array |
 
 ```php
@@ -61,25 +72,6 @@ Gateway hosted checkout, payment, checkout state and refund facts are native arr
 
 `PaymentReadService::forOrder()` authorizes before reading. Its array contains `orderReference`, ordered `payments` and `refunds`; payment facts include conservative reserved/refundable balances. Internal notes and operation credentials are omitted. It performs two payment-data queries; Core ownership metadata checks are separate.
 
-## Payment Element
-
-Configure a matching `nvl-payments.stripe.publishable_key` and authorize the `start_embedded`, `settle_embedded`, `close_embedded` and `recover_embedded` host abilities. The host provides a stable UUID per attempt.
-
-```php
-$element = $embedded->start($orderReference, $attemptUuid, $actor);
-// intentId, clientSecret, publishableKey, status and expiresAt
-$attempt = $embedded->settle($attemptUuid, $actor);
-$closed = $embedded->close($attemptUuid, $actor);
-```
-
-Return the client secret only to the authorized buyer. A repeated start uses the same intent with the original amount and currency. Payment Element defaults to `automatic_async` and allows cards, including eligible Apple Pay and Google Pay wallets. Both flows accept `automatic`, `automatic_async` and `manual`; manual capture uses cards and the existing authorization service. The hosted default remains `automatic`.
-
-Settle from a signed webhook or an authorized server read. A successful automatic payment is final without a capture call. The settled attempt and authorized timeline expose the charge ID and any available card brand, last four, expiration and wallet. A payment amount or currency mismatch, or payment observed after a confirmed closure, enters `payment_exception`. Treat it as an unresolved payment. Close returns true only after Stripe confirms cancellation, and a temporary provider outage leaves the attempt open.
-
-## Host ledger and refunds
-
-Bind `PaymentLedgerProjector` to mirror committed facts and schedule `nvl:payments:retry` to deliver outstanding facts. `PaymentRefunds::refund` accepts an attempt model, attempt ID, or Stripe Charge ID and keeps the host reason on the refund. See the [host ledger contract](docs/host-ledger.md) for reason mapping, replay, and split refunds.
-
 ## Consumer webhook endpoint
 
 Register the host endpoint and pass the untouched request body and Stripe signature to the public service:
@@ -92,11 +84,11 @@ Route::post('/payments/stripe/webhook', function (Request $request, PaymentWebho
 });
 ```
 
-The service verifies the signing secret, freshness, envelope, account and mode before processing. It owns replay receipts and current Stripe reads. Subscribe to Stripe refund updates for timely refund reconciliation. Custom gateways can implement `PaymentRefundLookup` to resolve a refund event to its authoritative payment. The consumer selects its route name, HTTP middleware and exception mapping. Doctor checks package readiness without requiring a specific consumer route name. Process webhooks outside an ambient Payments transaction so provider reads precede local locking. A browser checkout return is not payment evidence.
+The service verifies the signing secret, freshness, envelope, account and mode before processing. It stores the receipt and uses the configured worker to read current Stripe objects. A host route can call `enqueue()` for asynchronous processing. Doctor checks package readiness without requiring a specific consumer route name. Process webhooks outside an ambient Payments transaction so provider reads precede local locking. A browser checkout return is not payment evidence.
 
 ## Recovery and ownership
 
-Remote calls are bracketed by local transactions and persisted operation IDs. All Stripe operations must start outside an existing transaction on the Payments connection. Preserve unknown operations and reserved funds through provider timeouts; reconcile them using exact stored provider metadata before initiating another mutation. A Checkout request Stripe refuses outright (invalid request or rejected credential) created no Session: the attempt is recorded as `failed`, its reservation is released and the next `start` creates a new Session. Timeouts, rate limits, server errors and idempotency conflicts raise `ProviderUnavailable` and stay reserved. `ProviderRefused` carries Stripe's rejection code for other request errors.
+Remote calls are bracketed by local transactions and persisted operation IDs. Checkout, authorization and refund operations must start outside an existing transaction. Preserve unknown operations and reserved funds through provider timeouts; reconcile them using exact stored provider metadata before initiating another mutation. A Checkout request Stripe refuses outright (invalid request, rejected or restricted credential, rate limit) created no Session: the attempt is recorded as `failed`, its reservation is released and the next `start` creates a new Session. Timeouts, server errors and idempotency conflicts stay reserved.
 
 Manual card capture is final, including partial capture. Stripe reports a released hold (a canceled or expired authorization, or the uncaptured remainder of a partial capture) on the charge as refunded; gateway payment facts exclude it, so `refundedAmountMinor` counts captured money only. Pending/unknown refunds reserve balance. Reconciliation correlates lost refund responses by operation metadata and complete payment identity, never by equal amounts. `payment_exception` keeps financial facts visible until separately authorized acceptance, preserving the original order revision. Domain notifications follow the source connection's outer commit and disappear on rollback.
 
@@ -106,13 +98,13 @@ Run `nvl:payments:doctor --strict`, schedule `nvl:payments:reconcile`, and exerc
 
 Doctor checks the configured writer's required amount columns, positive payment/refund amounts, captured/refunded counter bounds, and live local refund reservations against the original payment total. Failed and canceled refunds release that reservation. These read-only checks return booleans, including on unavailable or incomplete sources; they neither enforce database constraints nor prove agreement with current Stripe state. Investigate failures through authorized private host tooling and reconciliation before allowing further financial effects.
 
-Payments migrations require `nvl-payments.migrations.allow_destructive_rollback=true` before dropping financial tables or columns. That guard applies to `down()`. Keep financial history under an explicit host retention and backup policy; use the recovery procedure in [UPGRADING.md](UPGRADING.md#financial-storage-retention-and-rollback) before any intentional database retirement. A routine application deployment rollback must preserve this storage.
+The creating migration's `down()` drops all four Payments tables, including operation journals and webhook replay receipts. Keep financial history under an explicit host retention and backup policy; use the recovery procedure in [UPGRADING.md](UPGRADING.md#financial-storage-retention-and-rollback) before any intentional database retirement. A routine application deployment rollback must preserve this storage.
 
 ## Testing your app
 
 `Nvl\Payments\Testing\FakePaymentGateway::fake($container)` installs a fresh gateway before constructing services. Script each method with `willReturn` or `willThrow`; return documented fact arrays and lists of refund fact arrays, and use `null` for checkout expiration. Scripts are per-instance FIFO; closures remain inert, exhausted scripts fail and calls retain exact named arguments.
 
-Gateway fakes avoid provider requests; actual service calls still exercise payment persistence, ownership and journals. Consumer Actions and HTTP fixtures belong in the host. The package does not ship application workflow interfaces, payload DTOs or routes.
+Gateway fakes avoid provider requests; actual service calls still exercise payment persistence, ownership and journals. Consumer Actions and HTTP fixtures belong in the host. The optional Stripe receiver supplies an HTTP endpoint for signed webhook intake. Hosts own checkout and management endpoints.
 
 ## Configured root models
 

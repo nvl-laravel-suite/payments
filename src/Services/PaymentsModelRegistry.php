@@ -21,7 +21,7 @@ use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
  *
  * @api
  */
-final class PaymentsModelRegistry
+class PaymentsModelRegistry
 {
     /** @var ConfiguredModelRegistration<PaymentAttempt> */
     private readonly ConfiguredModelRegistration $attempt;

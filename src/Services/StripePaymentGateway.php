@@ -327,6 +327,38 @@ final class StripePaymentGateway implements PaymentCustomerGateway, PaymentInten
         }
     }
 
+    /**
+     * @param  list<string>  $events
+     * @return array{stripe_country:bool,stripe_default_currency:bool,stripe_webhook_registration:bool}
+     */
+    public function inspectStripe(?string $endpointUrl, array $events): array
+    {
+        $account = $this->account();
+        $country = $account['country'];
+        $currency = $account['default_currency'];
+        $expectedCountry = config('nvl-payments.stripe.country');
+        $expectedCurrency = config('nvl-payments.stripe.default_currency');
+        $matched = false;
+        if ($endpointUrl !== null) {
+            $matched = $this->request('list_webhook_endpoints', function () use ($endpointUrl, $events): bool {
+                foreach ($this->client->webhookEndpoints->all(['limit' => 100])->autoPagingIterator() as $endpoint) {
+                    if ($endpoint->url === $endpointUrl && $endpoint->status === 'enabled' && $endpoint->livemode === $this->livemode
+                        && count($endpoint->enabled_events) === count($events) && array_diff($events, $endpoint->enabled_events) === []) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+
+        return [
+            'stripe_country' => is_string($country) && preg_match('/^[A-Z]{2}$/D', $country) === 1 && ($expectedCountry === null || $country === $expectedCountry),
+            'stripe_default_currency' => is_string($currency) && preg_match('/^[a-z]{3}$/D', $currency) === 1 && ($expectedCurrency === null || strtoupper($currency) === $expectedCurrency),
+            'stripe_webhook_registration' => $matched,
+        ];
+    }
+
     /** Read provider objects and check mode before deriving payment or refund facts. */
     private function retrievePayment(string $paymentReference): PaymentIntent|Charge
     {
@@ -350,10 +382,17 @@ final class StripePaymentGateway implements PaymentCustomerGateway, PaymentInten
     /** Verify the actual account belonging to the injected credential. */
     private function verifyAccount(): void
     {
+        $this->account();
+    }
+
+    private function account(): Account
+    {
         $account = $this->request('retrieve_account', fn () => $this->client->accounts->retrieve());
         if ($this->accountId === '' || $account->id !== $this->accountId) {
             throw new UnexpectedValueException('Stripe credential account does not match Payments configuration.');
         }
+
+        return $account;
     }
 
     private function verifyMode(StripeObject $object): void

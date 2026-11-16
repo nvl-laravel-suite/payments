@@ -29,7 +29,7 @@ use Nvl\Support\Events\DomainEventDispatcher;
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
  */
-final class PaymentReconciliation
+class PaymentReconciliation
 {
     /** Inject Stripe reads, validation, durable state, and projection boundaries. */
     public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentOperationJournal $journal, private readonly RefundBalance $balance, private readonly PaymentsIntegrityGuard $integrity, private readonly PaymentRefundWriter $refundWriter, private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentOrderOwnership $scope, private readonly ?DomainEventDispatcher $domainEvents = null, private readonly ?PaymentLedgerOutbox $outbox = null) {}

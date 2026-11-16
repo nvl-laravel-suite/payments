@@ -18,7 +18,7 @@ use Nvl\Payments\Exceptions\PaymentsException;
  * @phpstan-import-type PaymentSnapshot from PaymentProjection
  * @phpstan-import-type RefundSnapshot from PaymentProjection
  */
-final class PaymentReadService
+class PaymentReadService
 {
     /** Inject host order admission and immutable projection mapping. */
     public function __construct(private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentProjection $projection, private readonly PaymentOrderOwnership $scope) {}

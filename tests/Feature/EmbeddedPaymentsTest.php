@@ -23,6 +23,7 @@ use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Services\PaymentsAvailability;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Testing\FakePaymentGateway;
+use Nvl\Payments\Testing\PaymentLedgerContractKit;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 
@@ -160,13 +161,12 @@ it('publishes typed success only after outer commit, rolls back failed transacti
     $connection->transaction(fn () => app(PaymentStateSyncer::class)->sync($success));
     $row = PaymentLedgerDelivery::query()->sole();
     expect($row->delivered_at)->toBeNull();
-    $delivery = app(PaymentLedgerDelivery::class);
-    expect(fn () => $delivery->deliver($row->id))->toThrow(RuntimeException::class, 'host ledger down');
-    $projector->failing = false;
-    expect($delivery->deliver($row->id))->toBeTrue();
+    $kit = new PaymentLedgerContractKit;
+    $kit->assertFailureIsRetryable(app(PaymentLedgerDelivery::class), $row->id, $failure, function () use ($projector): void {
+        $projector->failing = false;
+    });
     expect($projector->calls[0])->toBeInstanceOf(PaymentSucceeded::class)->cardLastFour->toBe('4242')->amountMinor->toBe(1200);
-    expect($delivery->deliver($row->id, replay: true))->toBeTrue();
-    expect($projector->calls[1]->id())->toBe($projector->calls[0]->id());
+    $kit->assertReplay(app(PaymentLedgerDelivery::class), $row->id, fn () => array_map(fn ($fact) => $fact->id(), $projector->calls));
 });
 
 it('checks live key mode and blocks Stripe-bound operations inside the Payments transaction', function (): void {

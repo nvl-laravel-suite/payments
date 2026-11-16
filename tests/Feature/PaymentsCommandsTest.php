@@ -9,7 +9,11 @@ use Illuminate\Support\Facades\Route;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\PaymentAttempt;
+use Nvl\Payments\Services\PaymentWebhooks;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
+use Stripe\ApiRequestor;
+use Stripe\HttpClient\ClientInterface;
+use Stripe\HttpClient\CurlClient;
 
 require_once __DIR__.'/../ReconciliationTestCase.php';
 uses(PaymentsSchemaTestCase::class);
@@ -229,6 +233,43 @@ describe('local ledger readiness', function (): void {
             DB::purge('payments_doctor_replica');
         }
     });
+});
+
+it('probes the Stripe account and exact webhook event set without printing secrets', function (): void {
+    setupRefundHost();
+    config([
+        'nvl-payments.stripe.secret' => 'sk_test_doctor',
+        'nvl-payments.stripe.webhook_secret' => 'whsec_doctor',
+        'nvl-payments.stripe.country' => 'BG',
+        'nvl-payments.stripe.default_currency' => 'EUR',
+        'nvl-payments.checkout.return_hosts' => ['shop.test'],
+        'nvl-payments.webhooks.connection' => 'database',
+        'nvl-payments.webhooks.url' => 'https://shop.test/payments',
+    ]);
+    $account = ['object' => 'account', 'id' => 'acct_test', 'country' => 'BG', 'default_currency' => 'eur'];
+    $events = PaymentWebhooks::eventTypes();
+    $endpoint = ['object' => 'webhook_endpoint', 'id' => 'we_fixture', 'url' => 'https://shop.test/payments', 'livemode' => false, 'status' => 'enabled', 'enabled_events' => $events];
+    $list = ['object' => 'list', 'url' => '/v1/webhook_endpoints', 'has_more' => false];
+    $transport = Mockery::mock(ClientInterface::class);
+    $transport->shouldReceive('request')->twice()->withArgs(fn ($method, $url, $headers) => $method === 'get' && str_ends_with($url, '/v1/account') && in_array('Stripe-Version: 2026-10-28.endive', $headers, true))
+        ->andReturn([json_encode($account), 200, []]);
+    $transport->shouldReceive('request')->twice()->withArgs(fn ($method, $url) => $method === 'get' && str_ends_with($url, '/v1/webhook_endpoints'))
+        ->andReturn(
+            [json_encode($list + ['data' => [$endpoint]]), 200, []],
+            [json_encode($list + ['data' => [array_replace($endpoint, ['enabled_events' => [...$events, 'customer.updated']])]]), 200, []],
+        );
+    ApiRequestor::setHttpClient($transport);
+    try {
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--stripe' => true, '--format' => 'json']))->toBe(0);
+        $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        expect($report['checks'])->toMatchArray(['stripe_country' => true, 'stripe_default_currency' => true, 'stripe_webhook_registration' => true, 'webhook_queue' => true]);
+        expect($report['inbox'])->toMatchArray(['pending' => 0, 'failed' => 0, 'ignored' => 0, 'processed' => 0]);
+        expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--stripe' => true, '--format' => 'json']))->toBe(1);
+        expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['stripe_webhook_registration'])->toBeFalse();
+        expect(Artisan::output())->not->toContain('sk_test_doctor', 'whsec_doctor');
+    } finally {
+        ApiRequestor::setHttpClient(new CurlClient);
+    }
 });
 
 it('fails strict readiness for an unapproved live key without contacting Stripe', function (): void {

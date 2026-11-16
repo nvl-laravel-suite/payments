@@ -25,7 +25,7 @@ use Throwable;
  *
  * @api
  */
-final class PaymentRefunds
+class PaymentRefunds
 {
     /** Inject trusted host admission, remote facts, and refund reservation boundaries. */
     public function __construct(

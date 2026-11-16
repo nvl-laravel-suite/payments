@@ -18,7 +18,7 @@ use Stripe\WebhookSignature;
  *
  * @api
  */
-final class PaymentWebhooks
+class PaymentWebhooks
 {
     public function __construct(
         private readonly PaymentGateway $gateway,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Payments\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentOwnerWorklist;
 use Nvl\Payments\Services\PaymentReconciliation;
@@ -92,7 +93,8 @@ final class PaymentsReconcileCommand extends Command
                     PaymentsModelRegistry::attemptQuery()->whereKey($id)->update(['last_reconcile_attempt_at' => now()]);
                     $reconcile->reconcile($id);
                     $processed++;
-                } catch (Throwable) {
+                } catch (Throwable $failure) {
+                    Log::warning('payments.reconciliation_failed', ['attempt_id' => $id, 'exception_type' => $failure::class]);
                     $failed++;
                     $this->error('Reconciliation failed for attempt '.$id.'.');
                 }

@@ -54,13 +54,9 @@ retries of an allocation. The host reason stays on the local record. Map
 custom codes under `refund_reasons` when they have a Stripe equivalent:
 `duplicate`, `fraudulent` or `requested_by_customer`.
 
-Subscribe to `refund.created`, `refund.updated`, `refund.failed` and `charge.refunded`
-for refund transitions through a signed webhook. The default gateway re-reads
-Stripe facts before applying them. A custom gateway can implement
-`PaymentRefundLookup` to resolve refund-object events. Scheduled reconciliation
-also reads refund changes from Stripe.
-
-Schedule `nvl:payments:retry` to drain outstanding facts. Use `PaymentLedgerDelivery::retry()` to run the same recovery from a host job.
+Use `FakePaymentGateway` and `PaymentLedgerContractKit` against the actual host
+binding. The kit checks idempotent effects, explicit replay against a stored
+fact, and recovery after the binding throws. Use an isolated host test ledger.
 
 Stripe references [refund creation and limits](https://docs.stripe.com/api/refunds/create),
 [refund status and customer action](https://docs.stripe.com/refunds#refunds-that-require-action),

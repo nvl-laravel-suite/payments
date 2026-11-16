@@ -24,7 +24,7 @@ use Throwable;
  *
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  */
-final class PaymentAuthorizations
+class PaymentAuthorizations
 {
     /** Inject trusted host admission, Stripe facts, and durable payment state boundaries. */
     public function __construct(

@@ -38,7 +38,7 @@ use Nvl\Support\Ownership\Contracts\Ownable;
  *
  * @nvl-consumer-read id
  */
-final class PaymentOperation extends Model implements Ownable
+class PaymentOperation extends Model implements Ownable
 {
     /** @use HasFactory<PaymentOperationFactory> */
     use HasFactory;

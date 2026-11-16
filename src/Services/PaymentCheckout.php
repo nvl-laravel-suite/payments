@@ -35,7 +35,7 @@ use Throwable;
  * @phpstan-import-type StripeCheckoutState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  */
-final class PaymentCheckout
+class PaymentCheckout
 {
     /** Inject host authorization, trusted facts, and the durable Stripe boundary. */
     public function __construct(

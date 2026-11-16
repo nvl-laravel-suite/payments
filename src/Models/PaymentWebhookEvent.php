@@ -36,7 +36,7 @@ use Nvl\Support\Ownership\Contracts\Ownable;
  *
  * @nvl-consumer-read id
  */
-final class PaymentWebhookEvent extends Model implements Ownable
+class PaymentWebhookEvent extends Model implements Ownable
 {
     /** @use HasFactory<PaymentWebhookEventFactory> */
     use HasFactory;

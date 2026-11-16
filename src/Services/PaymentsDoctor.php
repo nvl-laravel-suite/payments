@@ -7,10 +7,12 @@ namespace Nvl\Payments\Services;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
+use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use PDOException;
+use Throwable;
 
 /**
  * Reports local deployment prerequisites using boolean checks without disclosing secrets.
@@ -30,17 +32,25 @@ final class PaymentsDoctor
      *
      * @return array<string, bool>
      */
-    public function inspect(): array
+    public function inspect(bool $inspectStripe = false): array
     {
         $orders = $this->orders;
         $access = $this->access;
 
+        $key = config('nvl-payments.stripe.secret');
+        $configured = config('nvl-payments.webhooks.connection');
+        $queueConnection = is_string($configured) ? $configured : config()->string('queue.default');
+        $driver = config('queue.connections.'.$queueConnection.'.driver');
+        $endpoint = config('nvl-payments.webhooks.url');
+        $inspectStripe = $inspectStripe || (is_string($endpoint) && $endpoint !== '');
         $checks = [
             'enabled' => config('nvl-payments.enabled') === true,
             'stripe_secret' => is_string(config('nvl-payments.stripe.secret')) && trim(config('nvl-payments.stripe.secret')) !== '',
             'webhook_secret' => is_string(config('nvl-payments.stripe.webhook_secret')) && trim(config('nvl-payments.stripe.webhook_secret')) !== '',
             'stripe_account' => is_string(config('nvl-payments.stripe.account_id')) && str_starts_with(config('nvl-payments.stripe.account_id'), 'acct_'),
-            'stripe_mode' => is_string($key = config('nvl-payments.stripe.secret')) && PaymentsAvailability::allowsKey($key),
+            'stripe_mode' => is_string($key) && PaymentsAvailability::allowsKey($key),
+            'webhook_queue' => is_string($driver) && $driver !== 'null' && (! ($inspectStripe || config('nvl-payments.webhooks.route') === true) || $driver !== 'sync')
+                && trim(config()->string('nvl-payments.webhooks.queue')) !== '' && config()->integer('nvl-payments.webhooks.max_attempts') > 0,
             'currencies' => is_array(config('nvl-payments.allowed_currencies')) && config('nvl-payments.allowed_currencies') !== [],
             'return_hosts' => (is_array(config('nvl-payments.checkout.return_hosts')) && config('nvl-payments.checkout.return_hosts') !== [])
                 || (is_string($publishable = config('nvl-payments.stripe.publishable_key')) && str_starts_with($publishable, config('nvl-payments.stripe.livemode') === true ? 'pk_live_' : 'pk_test_')),
@@ -59,7 +69,7 @@ final class PaymentsDoctor
             $attempts = PaymentsTables::get(PaymentsTables::Attempts);
             $refunds = PaymentsTables::get(PaymentsTables::Refunds);
             $columns = [];
-            foreach ([PaymentsTables::get(PaymentsTables::Attempts), PaymentsTables::get(PaymentsTables::Operations), PaymentsTables::get(PaymentsTables::Refunds), PaymentsTables::get(PaymentsTables::WebhookEvents)] as $table) {
+            foreach ([PaymentsTables::get(PaymentsTables::Attempts), PaymentsTables::get(PaymentsTables::Operations), PaymentsTables::get(PaymentsTables::Refunds), PaymentsTables::get(PaymentsTables::WebhookEvents), PaymentsTables::get(PaymentsTables::WebhookInbox), PaymentsTables::get(PaymentsTables::LedgerFacts), PaymentsTables::get(PaymentsTables::Customers)] as $table) {
                 $columns[$table] = array_map('strtolower', $schema->getColumnListing($table));
                 $checks['schema_'.$table] = $columns[$table] !== [];
             }
@@ -81,7 +91,38 @@ final class PaymentsDoctor
             $checks['schema_connection'] = false;
         }
 
+        if ($inspectStripe) {
+            $checks += ['stripe_country' => false, 'stripe_default_currency' => false, 'stripe_webhook_registration' => false];
+            if ($checks['enabled'] && $checks['stripe_mode'] && $checks['stripe_account']) {
+                try {
+                    $gateway = app(PaymentGateway::class);
+                    if ($gateway instanceof StripePaymentGateway) {
+                        $checks = array_replace($checks, $gateway->inspectStripe(is_string($endpoint) && $endpoint !== '' ? $endpoint : null, PaymentWebhooks::eventTypes()));
+                    }
+                } catch (Throwable) {
+                    // Provider failures are logged by the adapter without exposing credentials.
+                }
+            }
+        }
+
         return $checks;
+    }
+
+    /** @return array<string,int> */
+    public function inboxBacklog(): array
+    {
+        $counts = array_fill_keys(['pending', 'processing', 'failed', 'ignored', 'processed'], 0);
+        try {
+            foreach (PaymentWebhookInbox::query()->selectRaw('status, COUNT(*) AS total')->groupBy('status')->get() as $row) {
+                if (is_string($row->status) && isset($counts[$row->status]) && (is_int($row->total) || (is_string($row->total) && ctype_digit($row->total)))) {
+                    $counts[$row->status] = (int) $row->total;
+                }
+            }
+        } catch (QueryException|PDOException) {
+            return [];
+        }
+
+        return $counts;
     }
 
     /** Check persisted monetary bounds on the writer without loading private payment records. */

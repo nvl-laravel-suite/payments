@@ -70,6 +70,7 @@ These commands are registered by Composer-discovered package providers. Feature-
 
 - `php artisan nvl:payments:doctor --help`
 - `php artisan nvl:payments:reconcile --help`
+- `php artisan nvl:payments:retry --help`
 
 ## Optional packages
 

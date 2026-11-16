@@ -28,7 +28,7 @@ it('exposes complete native services without package Actions or payload carriers
     ];
     foreach ($operations as $service => $methods) {
         $reflection = new ReflectionClass($service);
-        expect($reflection->isFinal())->toBeTrue()->and($reflection->getDocComment())->toContain('@api');
+        expect($reflection->isFinal())->toBeFalse()->and($reflection->getDocComment())->toContain('@api');
         foreach ($methods as $method => $result) {
             $operation = $reflection->getMethod($method);
             expect($operation->isPublic())->toBeTrue()->and((string) $operation->getReturnType())->toBe($result)
