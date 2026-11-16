@@ -47,6 +47,7 @@ final class PaymentCheckout
         private readonly PaymentStateSyncer $syncer,
         private readonly PaymentReconciliation $reconciler,
         private readonly PaymentOrderOwnership $scope,
+        private readonly ?PaymentLedgerOutbox $outbox = null,
     ) {}
 
     /**
@@ -310,7 +311,7 @@ final class PaymentCheckout
             $this->verifySession($attempt, $remote);
             $changed = $attempt->order_revision !== $order->revision || $attempt->amount_minor !== $order->amountMinor || $attempt->currency !== strtoupper($order->currency);
             if ($remote['paymentStatus'] !== 'unpaid' || ($remote['status'] === 'complete' && ! $recoveringFailure)) {
-                PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'checking')->update(['state' => $changed ? 'payment_exception' : 'processing']);
+                $this->markPotentialPayment($attempt, $remote, $changed, ['checking']);
                 throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'The existing Session may have received payment.');
             }
             if ($remote['status'] === 'open' && ! $changed && ! $recoveringFailure && $remote['expiresAt']->isFuture()) {
@@ -341,7 +342,7 @@ final class PaymentCheckout
             }
             if ((! ($recoveringFailure && $remote['status'] === 'complete') && $remote['status'] !== 'expired') || $remote['paymentStatus'] !== 'unpaid') {
                 if ($remote['paymentStatus'] !== 'unpaid' || $remote['status'] === 'complete') {
-                    PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => $changed ? 'payment_exception' : 'processing']);
+                    $this->markPotentialPayment($attempt, $remote, $changed, ['checking', 'expiring']);
                 }
                 throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Session expiry was not confirmed.');
             }
@@ -367,6 +368,21 @@ final class PaymentCheckout
             PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->whereIn('state', ['checking', 'expiring'])->update(['state' => 'unknown']);
             throw $exception;
         }
+    }
+
+    /**
+     * @param  StripeCheckoutState  $remote
+     * @param  list<string>  $states
+     */
+    private function markPotentialPayment(PaymentAttempt $attempt, array $remote, bool $orderChanged, array $states): void
+    {
+        $attempt->getConnection()->transaction(function () use ($attempt, $remote, $orderChanged, $states): void {
+            $updated = PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->whereIn('state', $states)
+                ->update(['state' => $orderChanged ? 'payment_exception' : 'processing', 'exception_reason' => $orderChanged ? 'order_snapshot_changed' : null]);
+            if ($updated === 1 && $orderChanged) {
+                ($this->outbox ?? app(PaymentLedgerOutbox::class))->checkoutException($attempt, $remote, 'order_snapshot_changed');
+            }
+        }, 5);
     }
 
     /**

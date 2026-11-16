@@ -8,6 +8,7 @@ use Illuminate\Support\ServiceProvider;
 use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Payments\Console\Commands\PaymentsDoctorCommand;
 use Nvl\Payments\Console\Commands\PaymentsReconcileCommand;
+use Nvl\Payments\Console\Commands\PaymentsRetryCommand;
 use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentIntentGateway;
@@ -73,7 +74,7 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
             );
         });
         $this->app->bindIf(PaymentIntentGateway::class, function (): PaymentIntentGateway {
-            $gateway = $this->app->make(PaymentGateway::class);
+            $gateway = $this->app->get(PaymentGateway::class);
             if (! $gateway instanceof PaymentIntentGateway) {
                 throw new \LogicException('Bind a PaymentIntentGateway to use Payment Element.');
             }
@@ -99,7 +100,7 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
         $this->publishes([
             __DIR__.'/../../lang' => lang_path('vendor/nvl-payments'),
         ], 'nvl-payments-translations');
-        $this->commands([PaymentsDoctorCommand::class, PaymentsReconcileCommand::class]);
+        $this->commands([PaymentsDoctorCommand::class, PaymentsReconcileCommand::class, PaymentsRetryCommand::class]);
         $path = __DIR__.'/../../database/migrations/payments';
 
         $this->publishes([

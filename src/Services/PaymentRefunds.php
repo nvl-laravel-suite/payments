@@ -37,11 +37,16 @@ final class PaymentRefunds
         private readonly RefundBalance $balance,
         private readonly PaymentOrderOwnership $scope,
         private readonly PaymentRefundWriter $refundWriter,
+        private readonly ?PaymentLedgerOutbox $outbox = null,
     ) {}
 
     /** Reserve refundable funds atomically and issue one idempotent refund to the original payment method. */
     public function refund(PaymentAttempt|string $attempt, int $amountMinor, string $reason, ?string $note, string $operationId, Authenticatable $actor): PaymentRefund
     {
+        $chargeReference = is_string($attempt) && preg_match('/^ch_[a-zA-Z0-9]+$/D', $attempt) === 1 ? $attempt : null;
+        if ($chargeReference !== null) {
+            $attempt = PaymentsModelRegistry::attemptQuery()->where('stripe_charge_id', $chargeReference)->firstOrFail();
+        }
         $attemptId = $attempt instanceof PaymentAttempt ? $attempt->id : $attempt;
         $attempt = PaymentsModelRegistry::findAttemptOrFail($attemptId);
         $order = $this->orders->resolve($attempt->order_reference);
@@ -57,7 +62,7 @@ final class PaymentRefunds
             throw PaymentsException::because(PaymentsResponseCode::RefundBalanceExceeded, 'Refund exceeds the original payment amount.');
         }
         $actorId = $actor->getAuthIdentifier();
-        if ($amountMinor <= 0 || ! in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true)
+        if ($amountMinor <= 0 || preg_match('/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/D', $reason) !== 1
             || ! Str::isUuid($operationId) || (! is_string($actorId) && ! is_int($actorId)) || trim((string) $actorId) === '') {
             throw new InvalidArgumentException('A valid refund amount, reason, operation UUID, and stable actor are required.');
         }
@@ -68,20 +73,23 @@ final class PaymentRefunds
         if ($connection->transactionLevel() !== 0) {
             throw new DomainException('Refunds must start outside a database transaction.');
         }
+        $stripeReason = RefundBalance::providerReason($reason);
         $fingerprint = hash('sha256', json_encode([$attemptId, $reason, $note], JSON_THROW_ON_ERROR));
         if (PaymentOperation::query()->whereKey($operationId)->exists()) {
             $operation = $this->journal->reserve('refund', $attempt->order_reference, $operationId, (string) $actorId, $fingerprint, $amountMinor);
 
             return $this->replay($operation);
         }
-        $reference = $attempt->stripe_payment_intent_id ?? $attempt->stripe_charge_id ?? throw new DomainException('Missing Stripe payment identity.');
+        $reference = $chargeReference ?? $attempt->stripe_payment_intent_id ?? $attempt->stripe_charge_id ?? throw new DomainException('Missing Stripe payment identity.');
+        $observedRefunds = PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $attempt->id)
+            ->orderBy('id')->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
         $payment = $this->gateway->payment($reference);
         if ($this->syncer->exceptionReason($attempt, $payment) !== null) {
             throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Resolve the payment exception before refunding.');
         }
         $this->syncer->assertMatches($attempt, $payment);
         $refunds = $this->gateway->refunds($reference);
-        $operation = $connection->transaction(function () use ($attempt, $operationId, $actorId, $fingerprint, $amountMinor, $reason, $note, $payment, $refunds): PaymentOperation {
+        $operation = $connection->transaction(function () use ($attempt, $operationId, $actorId, $fingerprint, $amountMinor, $reason, $note, $payment, $refunds, $stripeReason, $observedRefunds): PaymentOperation {
             // Acquire SQLite's write lock before reading the balance; PostgreSQL locks this attempt row.
             PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);
             $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
@@ -89,16 +97,27 @@ final class PaymentRefunds
             if (! $operation->wasRecentlyCreated) {
                 return $operation;
             }
+            $this->syncer->assertMatches($current, $payment);
             if ($this->syncer->exceptionReason($current, $payment) !== null) {
                 throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Resolve the payment exception before refunding.');
             }
-            $this->syncer->assertMatches($current, $payment);
+            $currentRefunds = PaymentsModelRegistry::refundQuery()->where('payment_attempt_id', $current->id)
+                ->orderBy('id')->lockForUpdate()->get()->map(fn (PaymentRefund $refund) => $refund->getRawOriginal())->all();
+            $observedById = array_column($observedRefunds, null, 'id');
+            foreach ($currentRefunds as $currentRefund) {
+                $id = $currentRefund['id'];
+                $observed = is_string($id) ? ($observedById[$id] ?? null) : null;
+                if ($observed !== null && $currentRefund !== $observed) {
+                    throw PaymentsException::because(PaymentsResponseCode::ReconciliationRequired, 'Refunds changed after the Stripe read.');
+                }
+            }
+            $this->syncer->sync($payment);
             if ($amountMinor > $this->balance->available($current, $payment, $refunds, $attempt->refunded_amount_minor)) {
                 throw PaymentsException::because(PaymentsResponseCode::RefundBalanceExceeded, 'Refund exceeds the available captured balance.');
             }
             $operation->update(['payment_attempt_id' => $current->id]);
             $this->refundWriter->create(['payment_attempt_id' => $current->id, 'payment_operation_id' => $operation->id,
-                'amount_minor' => $amountMinor, 'currency' => $current->currency, 'reason' => $reason, 'internal_note' => $note, 'status' => 'reserved']);
+                'amount_minor' => $amountMinor, 'currency' => $current->currency, 'reason' => $reason, 'stripe_reason' => $stripeReason, 'internal_note' => $note, 'status' => 'reserved']);
 
             return $operation;
         }, 5);
@@ -107,7 +126,7 @@ final class PaymentRefunds
         }
         $refund = PaymentsModelRegistry::refundQuery()->where('payment_operation_id', $operation->id)->sole();
         try {
-            $result = $this->gateway->refund($reference, $amountMinor, $reason, $operation->idempotency_key);
+            $result = $this->gateway->refund($reference, $amountMinor, $stripeReason ?? $reason, $operation->idempotency_key);
             $this->balance->assertMatches($attempt, $result, $refund);
             $connection->transaction(function () use ($attempt, $refund, $result, $operation): void {
                 PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);
@@ -115,7 +134,8 @@ final class PaymentRefunds
                 $this->balance->assertMatches($attempt, $result, $current);
                 // A linked refund has already been observed by reconciliation after creation.
                 if ($current->stripe_refund_id === null) {
-                    $current->update(['stripe_refund_id' => $result['refundId'], 'status' => $result['status'], 'last_synced_at' => now()]);
+                    $current->update(['stripe_refund_id' => $result['refundId'], 'status' => $result['status'], 'ledger_transition' => 1, 'last_synced_at' => now()]);
+                    ($this->outbox ?? app(PaymentLedgerOutbox::class))->refund($attempt, $current, $result);
                 }
                 $this->journal->complete($operation, $result['refundId']);
             }, 5);

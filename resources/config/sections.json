@@ -23,6 +23,7 @@
                 "minimum_amounts",
                 "reconciliation.batch_size",
                 "reconciliation.max_attempts",
+                "refund_reasons",
                 "stripe.account_id",
                 "stripe.livemode",
                 "stripe.publishable_key",

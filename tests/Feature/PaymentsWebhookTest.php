@@ -10,8 +10,10 @@ use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentWebhookEvent;
+use Nvl\Payments\Services\PaymentLedgerDelivery;
 use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Services\PaymentWebhooks;
+use Nvl\Payments\Testing\FakePaymentGateway;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 
 require_once __DIR__.'/../PaymentsTestCase.php';
@@ -209,8 +211,10 @@ it('fails closed when the signing secret is missing or Payments is disabled', fu
 
 it('waits for the configured Payments connection rather than the default connection', function (): void {
     config(['database.connections.payments_secondary' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true], 'nvl-payments.connection' => 'payments_secondary']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
-    $migration->up();
+    $migrations = array_map(fn ($path) => require $path, glob(__DIR__.'/../../database/migrations/payments/*.php'));
+    foreach ($migrations as $migration) {
+        $migration->up();
+    }
     webhookAttempt();
     $events = [];
     Event::listen(PaymentStateChanged::class, function ($event) use (&$events): void {
@@ -222,7 +226,9 @@ it('waits for the configured Payments connection rather than the default connect
     expect($events)->toBe([]);
     $connection->commit();
     expect($events)->toHaveCount(1);
-    $migration->down();
+    foreach (array_reverse($migrations) as $migration) {
+        $migration->down();
+    }
     config(['nvl-payments.connection' => null]);
 });
 
@@ -251,4 +257,22 @@ it('quarantines a mismatched embedded success read through the existing signed w
         ->exception_reason->toBe('currency_mismatch')
         ->captured_amount_minor->toBe(0);
     expect(PaymentWebhookEvent::sole()->status)->toBe('processed');
+});
+
+it('re-fetches a signed refund and records the latest provider status', function (): void {
+    $attempt = webhookAttempt(['origin' => 'embedded', 'stripe_checkout_session_id' => null, 'state' => 'captured', 'captured_amount_minor' => 1000, 'stripe_charge_id' => 'ch_one']);
+    $refund = [
+        'refundId' => 're_one', 'paymentIntentId' => 'pi_one', 'chargeId' => 'ch_one', 'accountId' => 'acct_one',
+        'livemode' => false, 'amountMinor' => 100, 'currency' => 'eur', 'status' => 'succeeded', 'reason' => null, 'operationKey' => null,
+    ];
+    $gateway = FakePaymentGateway::fake(app())
+        ->willReturn('readRefund', $refund)
+        ->willReturn('payment', webhookPayment(['refundedAmountMinor' => 100]))
+        ->willReturn('refunds', [$refund]);
+    $event = webhookPayload(['type' => 'refund.updated', 'data' => ['object' => ['id' => 're_one', 'amount' => 1, 'status' => 'failed']]]);
+
+    deliverWebhook($event)->assertOk();
+    expect($attempt->refresh()->refunded_amount_minor)->toBe(100);
+    expect(PaymentLedgerDelivery::query()->orderBy('sequence')->pluck('type')->all())->toBe(['payment_succeeded_v1', 'refund_succeeded_v1']);
+    $gateway->assertCalled('readRefund', fn ($call) => $call->arguments === ['refundId' => 're_one'], times: 1);
 });

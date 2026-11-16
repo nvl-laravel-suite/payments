@@ -24,7 +24,7 @@ use Nvl\Support\Events\DomainEventDispatcher;
 final class PaymentStateSyncer
 {
     /** Retain the source-aware domain event dispatcher. */
-    public function __construct(private DomainEventDispatcher $domainEvents, private PaymentsIntegrityGuard $integrity) {}
+    public function __construct(private DomainEventDispatcher $domainEvents, private PaymentsIntegrityGuard $integrity, private PaymentLedgerOutbox $outbox) {}
 
     /**
      * Synchronize only a previously correlated payment and notify after its connection commits.
@@ -88,6 +88,7 @@ final class PaymentStateSyncer
                 if ($attempt->state !== 'payment_exception') {
                     $oldState = $attempt->state;
                     $attempt->update(['state' => 'payment_exception', 'exception_reason' => $reason, 'last_synced_at' => now()]);
+                    $this->outbox->payment($attempt, $payment, $reason);
                     Log::warning('payments.intent_mismatch', ['attempt_id' => $attempt->id, 'intent_id' => $payment['paymentIntentId'], 'reason' => $reason]);
                     $this->domainEvents->dispatch(new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, 'payment_exception', $payment['paymentIntentId'], $payment['chargeId'], null), $connection);
                 }
@@ -131,6 +132,7 @@ final class PaymentStateSyncer
                 $attempt->reservation_key = null;
             }
             $attempt->save();
+            $this->outbox->payment($attempt, $payment);
             if ($changed) {
                 $event = new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, $state, $payment['paymentIntentId'], $payment['chargeId'], $attempt->stripe_checkout_session_id);
                 $this->domainEvents->dispatch($event, $connection);

@@ -6,13 +6,20 @@ use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Contracts\PaymentLedgerProjector;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Exceptions\ProviderRefused;
+use Nvl\Payments\Ledger\PaymentLedgerFact;
+use Nvl\Payments\Ledger\PaymentSucceeded;
+use Nvl\Payments\Ledger\RefundFailed;
+use Nvl\Payments\Ledger\RefundPending;
+use Nvl\Payments\Ledger\RefundSucceeded;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Models\PaymentRefund;
 use Nvl\Payments\Services\DenyPaymentManagementAccess;
 use Nvl\Payments\Services\PaymentProjection;
+use Nvl\Payments\Services\PaymentReconciliation;
 use Nvl\Payments\Services\PaymentRefunds;
 use Nvl\Payments\Tests\Fixtures\ReconcilePaymentAction;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
@@ -99,7 +106,7 @@ it('rejects changed immutable UUID inputs', function (int $amount, string $reaso
 it('rejects nonpositive amounts and unsupported reasons before remote access', function (int $amount, string $reason): void {
     expect(fn () => refundPayment($amount, reason: $reason))->toThrow(InvalidArgumentException::class);
     expect(PaymentOperation::count())->toBe(0);
-})->with([[0, 'duplicate'], [-1, 'duplicate'], [700, 'arbitrary']]);
+})->with([[0, 'duplicate'], [-1, 'duplicate'], [700, 'invalid reason']]);
 
 it('rejects invalid refund notes before provider access or financial reservation', function (string $note): void {
     $this->gateway->shouldReceive('payment')->andReturn(refundPaymentState());
@@ -337,3 +344,45 @@ it('recovers the original reservation when reconciliation precedes the refund cr
         ->and(PaymentOperation::sole()->status)->toBe('completed');
     expect(app(ReconcilePaymentAction::class)->execute($this->attempt->id)['refundableAmountMinor'])->toBe(500);
 })->with([true, false]);
+
+it('delivers the parent before a charge refund and retains host reason and refund identity across reconciliation', function (): void {
+    $attempt = $this->attempt;
+    $attempt->update(['state' => 'open', 'captured_amount_minor' => 0]);
+    config(['nvl-payments.refund_reasons' => ['return.damaged' => 'requested_by_customer']]);
+    $projector = new class implements PaymentLedgerProjector
+    {
+        /** @var list<PaymentLedgerFact> */
+        public array $facts = [];
+
+        public function project(PaymentLedgerFact $fact): void
+        {
+            $this->facts[] = $fact;
+        }
+    };
+    app()->instance(PaymentLedgerProjector::class, $projector);
+    $this->gateway->shouldReceive('payment')->once()->with('ch_refund')->andReturn(refundPaymentState());
+    $this->gateway->shouldReceive('refunds')->once()->with('ch_refund')->andReturn([]);
+    $this->gateway->shouldReceive('refund')->once()->with('ch_refund', 700, 'requested_by_customer', Mockery::type('string'))->andReturn(remoteRefund(status: 'pending'));
+
+    $id = (string) Str::uuid();
+    $service = app(PaymentRefunds::class);
+    $refund = $service->refund('ch_refund', 700, 'return.damaged', null, $id, new GenericUser(['id' => 'admin']));
+    expect($projector->facts)->toHaveCount(2);
+    expect($projector->facts[0])->toBeInstanceOf(PaymentSucceeded::class);
+    expect($projector->facts[1])->toBeInstanceOf(RefundPending::class)->reason->toBe('return.damaged')->operationId->toBe($id);
+    expect($refund->reason)->toBe('return.damaged');
+
+    config(['nvl-payments.refund_reasons' => ['return.damaged' => 'duplicate']]);
+    $this->gateway->shouldReceive('payment')->with('pi_refund')->andReturn(refundPaymentState(700), refundPaymentState(700), refundPaymentState());
+    $this->gateway->shouldReceive('refunds')->with('pi_refund')->andReturn([remoteRefund()], [remoteRefund(status: 'requires_action')], [remoteRefund(status: 'failed')]);
+    $reconciliation = app(PaymentReconciliation::class);
+    $reconciliation->reconcile($attempt->id);
+    $reconciliation->reconcile($attempt->id);
+    $reconciliation->reconcile($attempt->id);
+
+    expect($projector->facts)->toHaveCount(5);
+    expect($projector->facts[2])->toBeInstanceOf(RefundSucceeded::class);
+    expect($projector->facts[3])->toBeInstanceOf(RefundPending::class);
+    expect($projector->facts[4])->toBeInstanceOf(RefundFailed::class)->reason->toBe('return.damaged');
+    expect(array_unique(array_map(fn ($fact) => $fact->id(), $projector->facts)))->toHaveCount(5);
+});

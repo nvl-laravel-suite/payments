@@ -28,6 +28,7 @@ return [
         'allowed_payment_method_types' => ['card'],
         'expires_in_minutes' => 30,
     ],
+    'refund_reasons' => [],
     'checkout' => [
         'return_hosts' => [],
         'expires_in_minutes' => 120,

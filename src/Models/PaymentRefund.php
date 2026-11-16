@@ -28,6 +28,8 @@ use Nvl\Support\Ownership\Contracts\Ownable;
  * @property string|null $stripe_refund_id
  * @property int $amount_minor
  * @property string $currency
+ * @property string|null $stripe_reason
+ * @property int $ledger_transition
  * @property string|null $reason
  * @property string|null $internal_note
  * @property string $status
@@ -57,13 +59,13 @@ class PaymentRefund extends Model implements Ownable
     /** @var list<string> */
     protected $fillable = [
         'payment_attempt_id', 'payment_operation_id', 'stripe_refund_id',
-        'amount_minor', 'currency', 'reason', 'internal_note', 'status', 'last_synced_at',
+        'amount_minor', 'currency', 'reason', 'stripe_reason', 'ledger_transition', 'internal_note', 'status', 'last_synced_at',
     ];
 
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['amount_minor' => 'integer', 'last_synced_at' => 'datetime'];
+        return ['amount_minor' => 'integer', 'ledger_transition' => 'integer', 'last_synced_at' => 'datetime'];
     }
 
     /** Resolve the canonical native refund parent.

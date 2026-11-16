@@ -15,7 +15,7 @@ final readonly class PaymentProviderCorrelation
     public static function field(string $type): ?string
     {
         return match ($type) {
-            'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed' => 'stripe_checkout_session_id',
+            'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed', 'checkout.session.expired' => 'stripe_checkout_session_id',
             'payment_intent.succeeded', 'payment_intent.processing', 'payment_intent.payment_failed', 'payment_intent.amount_capturable_updated', 'payment_intent.canceled' => 'stripe_payment_intent_id',
             'charge.refunded' => 'stripe_charge_id',
             default => null,

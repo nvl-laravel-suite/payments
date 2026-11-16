@@ -32,7 +32,7 @@ use Nvl\Support\Events\DomainEventDispatcher;
 final class PaymentReconciliation
 {
     /** Inject Stripe reads, validation, durable state, and projection boundaries. */
-    public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentOperationJournal $journal, private readonly RefundBalance $balance, private readonly PaymentsIntegrityGuard $integrity, private readonly PaymentRefundWriter $refundWriter, private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentOrderOwnership $scope, private readonly ?DomainEventDispatcher $domainEvents = null) {}
+    public function __construct(private readonly PaymentGateway $gateway, private readonly PaymentStateSyncer $syncer, private readonly PaymentOperationJournal $journal, private readonly RefundBalance $balance, private readonly PaymentsIntegrityGuard $integrity, private readonly PaymentRefundWriter $refundWriter, private readonly PaymentOrderProvider $orders, private readonly PaymentManagementAccess $access, private readonly PaymentOrderOwnership $scope, private readonly ?DomainEventDispatcher $domainEvents = null, private readonly ?PaymentLedgerOutbox $outbox = null) {}
 
     /** Accept a confirmed payment exception once with an immutable actor and operation UUID. */
     public function resolveException(PaymentAttempt|string $attempt, string $operationId, Authenticatable $actor): PaymentAttempt
@@ -86,6 +86,7 @@ final class PaymentReconciliation
                 $current->refresh();
                 $state = $current->refunded_amount_minor > 0 ? ($current->refunded_amount_minor === $current->captured_amount_minor ? 'refunded' : 'partially_refunded') : 'captured';
                 $current->update(['state' => $state, 'exception_reason' => null]);
+                ($this->outbox ?? app(PaymentLedgerOutbox::class))->payment($current, $payment);
                 $this->journal->complete($operation, $current->stripe_payment_intent_id ?? $current->stripe_charge_id ?? $current->id);
                 $event = new PaymentStateChanged($current->order_reference, $current->id, 'payment_exception', $state, $current->stripe_payment_intent_id, $current->stripe_charge_id, $current->stripe_checkout_session_id);
                 ($this->domainEvents ?? DomainEventDispatcher::current())->dispatch($event, $connection);
@@ -157,8 +158,8 @@ final class PaymentReconciliation
                     throw PaymentsException::because(PaymentsResponseCode::ProviderPayloadInvalid, 'Stripe refund facts disagree about a partial capture reversal.');
                 }
                 $this->removeImportedReversals($current, $reversals);
-                $this->applyRefunds($current, $refunds);
                 $this->syncer->reconcile($payment, $refunds);
+                $this->applyRefunds($current, $refunds);
             }
             $this->resolveOperations($current, $checkout, $payment);
         }, 5);
@@ -271,14 +272,18 @@ final class PaymentReconciliation
             if ($local === null) {
                 $operation = $this->journal->reserve('reconcile_refund', $attempt->order_reference, (string) Str::uuid(), 'system:reconciliation', $remote['refundId'], $remote['amountMinor']);
                 $operation->update(['payment_attempt_id' => $attempt->id]);
-                $local = $this->refundWriter->create(['payment_attempt_id' => $attempt->id, 'payment_operation_id' => $operation->id, 'stripe_refund_id' => $remote['refundId'], 'amount_minor' => $remote['amountMinor'], 'currency' => strtoupper($remote['currency']), 'reason' => $remote['reason'], 'status' => $remote['status'], 'last_synced_at' => now()]);
+                $local = $this->refundWriter->create(['payment_attempt_id' => $attempt->id, 'payment_operation_id' => $operation->id, 'stripe_refund_id' => $remote['refundId'], 'amount_minor' => $remote['amountMinor'], 'currency' => strtoupper($remote['currency']), 'reason' => $remote['reason'], 'status' => $remote['status'], 'ledger_transition' => 1, 'last_synced_at' => now()]);
             } else {
                 if (in_array($local->status, ['failed', 'canceled'], true) && $local->status !== $remote['status']) {
                     throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'A terminal refund changed unexpectedly.');
                 }
+                if ($local->status !== $remote['status'] || $local->stripe_refund_id === null) {
+                    $local->ledger_transition++;
+                }
                 $local->update(['stripe_refund_id' => $remote['refundId'], 'status' => $remote['status'], 'last_synced_at' => now()]);
                 $operation = PaymentOperation::query()->findOrFail($local->payment_operation_id);
             }
+            ($this->outbox ?? app(PaymentLedgerOutbox::class))->refund($attempt, $local, $remote);
             $this->journal->complete($operation, $remote['refundId']);
         }
     }

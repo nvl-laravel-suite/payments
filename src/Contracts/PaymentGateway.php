@@ -18,8 +18,8 @@ use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
  *
  * @phpstan-type HostedCheckout array{sessionId:string, url:string, expiresAt:\Carbon\CarbonImmutable}
  * @phpstan-type StripeCheckoutState array{sessionId:string, paymentIntentId:?string, accountId:string, livemode:bool, amountMinor:int, currency:string, status:string, paymentStatus:string, orderReference:?string, orderRevision:?string, expiresAt:\Carbon\CarbonImmutable, operationKey:?string, url:?string}
- * @phpstan-type StripePaymentState array{paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, capturedAmountMinor:int, refundedAmountMinor:int, releasedHoldRefundIds?:list<string>, currency:string, status:string, captureMethod:string, amountCapturableMinor:?int, paymentMethodType:?string, partialAuthorizationStatus:?string, cardBrand?:?string, cardLastFour?:?string, cardExpiryMonth?:?int, cardExpiryYear?:?int, wallet?:?string, failureCode?:?string, clientSecret?:?string, operationKey?:?string}
- * @phpstan-type StripeRefundState array{refundId:string, paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, currency:string, status:string, reason:?string, operationKey:?string}
+ * @phpstan-type StripePaymentState array{paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, capturedAmountMinor:int, refundedAmountMinor:int, releasedHoldRefundIds?:list<string>, currency:string, status:string, captureMethod:string, amountCapturableMinor:?int, paymentMethodType:?string, partialAuthorizationStatus:?string, cardBrand?:?string, cardLastFour?:?string, cardExpiryMonth?:?int, cardExpiryYear?:?int, wallet?:?string, providerOccurredAt?:?int, failureCode?:?string, failureReference?:?string, clientSecret?:?string, operationKey?:?string}
+ * @phpstan-type StripeRefundState array{refundId:string, paymentIntentId:?string, chargeId:?string, accountId:string, livemode:bool, amountMinor:int, currency:string, status:string, reason:?string, operationKey:?string, providerOccurredAt?:?int}
  */
 interface PaymentGateway
 {

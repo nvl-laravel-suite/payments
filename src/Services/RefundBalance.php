@@ -20,6 +20,8 @@ use Nvl\Payments\Models\PaymentRefund;
  */
 final class RefundBalance
 {
+    public function __construct(private readonly PaymentLedgerOutbox $outbox) {}
+
     /**
      * Reconcile known refund IDs and return balance while the caller holds the attempt lock.
      *
@@ -66,8 +68,9 @@ final class RefundBalance
             if ($known !== null) {
                 $this->assertMatches($attempt, $known, $local);
                 // Stripe can return a succeeded refund to requires_action before failing or canceling it.
-                if (! in_array($local->status, ['failed', 'canceled'], true)) {
-                    $local->update(['status' => $known['status'], 'last_synced_at' => now()]);
+                if ($local->status !== $known['status'] && ! in_array($local->status, ['failed', 'canceled'], true)) {
+                    $local->update(['status' => $known['status'], 'ledger_transition' => $local->ledger_transition + 1, 'last_synced_at' => now()]);
+                    $this->outbox->refund($attempt, $local, $known);
                 }
             } elseif (! in_array($local->status, ['failed', 'canceled'], true)) {
                 $localReserved += $local->amount_minor;
@@ -79,6 +82,13 @@ final class RefundBalance
         return $payment['capturedAmountMinor'] - max($payment['refundedAmountMinor'], $remoteReserved, $concurrentRefundedMinor) - $localReserved;
     }
 
+    public static function providerReason(?string $reason): ?string
+    {
+        $mapped = config()->array('nvl-payments.refund_reasons')[$reason] ?? $reason;
+
+        return in_array($mapped, ['duplicate', 'fraudulent', 'requested_by_customer'], true) ? $mapped : null;
+    }
+
     /**
      * Reject uncorrelated, malformed, or changed Stripe refund facts before releasing balance.
      *
@@ -86,6 +96,7 @@ final class RefundBalance
      */
     public function assertMatches(PaymentAttempt $attempt, array $refund, ?PaymentRefund $local = null): void
     {
+        $stripeReason = $local->stripe_reason ?? ($local !== null && in_array($local->reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true) ? $local->reason : null);
         if ((! str_starts_with($refund['refundId'], 're_') && ! str_starts_with($refund['refundId'], 'pyr_')) || $refund['accountId'] !== config('nvl-payments.stripe.account_id')
             || $refund['livemode'] !== config('nvl-payments.stripe.livemode')
             || ($attempt->stripe_account_id !== null && $attempt->stripe_account_id !== $refund['accountId'])
@@ -96,7 +107,7 @@ final class RefundBalance
             || strtolower($attempt->currency) !== strtolower($refund['currency'])
             || $refund['amountMinor'] <= 0 || $refund['amountMinor'] > $attempt->amount_minor
             || ! in_array($refund['status'], ['pending', 'requires_action', 'succeeded', 'failed', 'canceled'], true)
-            || ($local !== null && ($refund['amountMinor'] !== $local->amount_minor || $refund['reason'] !== $local->reason
+            || ($local !== null && ($refund['amountMinor'] !== $local->amount_minor || ($stripeReason !== null && $refund['reason'] !== $stripeReason)
                 || ($local->stripe_refund_id !== null && $local->stripe_refund_id !== $refund['refundId'])))) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe refund does not match the reserved payment and refund.');
         }

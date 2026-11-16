@@ -51,6 +51,15 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Contracts\\PaymentLedgerProjector": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentLedgerProjector.php",
+            "methods": [
+                "project"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Contracts\\PaymentManagementAccess": {
             "kind": "interface",
             "file": "src/Contracts/PaymentManagementAccess.php",
@@ -74,6 +83,15 @@
             "file": "src/Contracts/PaymentOwnerWorklist.php",
             "methods": [
                 "owners"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Contracts\\PaymentRefundLookup": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentRefundLookup.php",
+            "methods": [
+                "readRefund"
             ],
             "properties": [],
             "constants": []
@@ -220,6 +238,200 @@
             ],
             "constants": []
         },
+        "Nvl\\Payments\\Ledger\\PaymentCanceled": {
+            "kind": "class",
+            "file": "src/Ledger/PaymentCanceled.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "id",
+                "intentId",
+                "livemode",
+                "orderReference",
+                "providerOccurredAt"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\PaymentExceptionRaised": {
+            "kind": "class",
+            "file": "src/Ledger/PaymentExceptionRaised.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "expectedAmountMinor",
+                "expectedCurrency",
+                "id",
+                "intentId",
+                "livemode",
+                "orderReference",
+                "providerOccurredAt",
+                "reason"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\PaymentFailed": {
+            "kind": "class",
+            "file": "src/Ledger/PaymentFailed.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "failureCode",
+                "id",
+                "intentId",
+                "livemode",
+                "orderReference",
+                "providerOccurredAt"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\PaymentLedgerFact": {
+            "kind": "interface",
+            "file": "src/Ledger/PaymentLedgerFact.php",
+            "methods": [
+                "id"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\PaymentSucceeded": {
+            "kind": "class",
+            "file": "src/Ledger/PaymentSucceeded.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "cardBrand",
+                "cardExpiryMonth",
+                "cardExpiryYear",
+                "cardLastFour",
+                "chargeId",
+                "currency",
+                "id",
+                "intentId",
+                "livemode",
+                "orderReference",
+                "providerOccurredAt",
+                "wallet"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\RefundCanceled": {
+            "kind": "class",
+            "file": "src/Ledger/RefundCanceled.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "id",
+                "intentId",
+                "livemode",
+                "operationId",
+                "orderReference",
+                "providerOccurredAt",
+                "providerStatus",
+                "reason",
+                "refundId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\RefundFailed": {
+            "kind": "class",
+            "file": "src/Ledger/RefundFailed.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "id",
+                "intentId",
+                "livemode",
+                "operationId",
+                "orderReference",
+                "providerOccurredAt",
+                "providerStatus",
+                "reason",
+                "refundId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\RefundPending": {
+            "kind": "class",
+            "file": "src/Ledger/RefundPending.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "id",
+                "intentId",
+                "livemode",
+                "operationId",
+                "orderReference",
+                "providerOccurredAt",
+                "providerStatus",
+                "reason",
+                "refundId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Payments\\Ledger\\RefundSucceeded": {
+            "kind": "class",
+            "file": "src/Ledger/RefundSucceeded.php",
+            "methods": [
+                "__construct",
+                "id"
+            ],
+            "properties": [
+                "amountMinor",
+                "attemptReference",
+                "chargeId",
+                "currency",
+                "id",
+                "intentId",
+                "livemode",
+                "operationId",
+                "orderReference",
+                "providerOccurredAt",
+                "providerStatus",
+                "reason",
+                "refundId"
+            ],
+            "constants": []
+        },
         "Nvl\\Payments\\Models\\PaymentAttempt": {
             "kind": "class",
             "file": "src/Models/PaymentAttempt.php",
@@ -330,12 +542,14 @@
                 "id",
                 "internal_note",
                 "last_synced_at",
+                "ledger_transition",
                 "owner_reference",
                 "owner_scope_key",
                 "payment_attempt_id",
                 "payment_operation_id",
                 "reason",
                 "status",
+                "stripe_reason",
                 "stripe_refund_id",
                 "updated_at"
             ],
@@ -408,6 +622,16 @@
                 "attach",
                 "recover",
                 "start"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Payments\\Services\\PaymentLedgerDelivery": {
+            "kind": "class",
+            "file": "src/Services/PaymentLedgerDelivery.php",
+            "methods": [
+                "deliver",
+                "retry"
             ],
             "properties": [],
             "constants": []
@@ -489,6 +713,7 @@
                 "fake",
                 "intent",
                 "payment",
+                "readRefund",
                 "refund",
                 "refunds",
                 "resolveExisting",

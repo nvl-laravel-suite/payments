@@ -28,7 +28,7 @@ final readonly class PaymentsProviderAdmission
      *
      * @param  Closure():void  $apply
      */
-    public function run(Event $event, Closure $apply): void
+    public function run(Event $event, Closure $apply, ?string $refundParent = null): void
     {
         if (! $this->native()) {
             $apply();
@@ -43,12 +43,13 @@ final readonly class PaymentsProviderAdmission
         if ($this->historicalReceipt($event, $object)) {
             return;
         }
-        $field = PaymentProviderCorrelation::field($event->type);
+        $field = $refundParent === null ? PaymentProviderCorrelation::field($event->type)
+            : (str_starts_with($refundParent, 'pi_') ? 'stripe_payment_intent_id' : 'stripe_charge_id');
         if ($field === null) {
             return;
         }
         $model = PaymentsModelRegistry::newAttempt();
-        $rows = $model->getConnection()->table($model->getTable())->useWritePdo()->where($field, $object)->limit(2)->get(['owner_scope_key', 'owner_reference']);
+        $rows = $model->getConnection()->table($model->getTable())->useWritePdo()->where($field, $refundParent ?? $object)->limit(2)->get(['owner_scope_key', 'owner_reference']);
         if ($rows->isEmpty()) {
             return;
         }

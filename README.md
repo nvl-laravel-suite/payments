@@ -2,7 +2,7 @@
 
 Standalone Stripe order payments for PHP 8.4 and Laravel 13. Install Payments separately from the suite metapackage. It requires Core and Stripe PHP; Billing, Cashier, Tenancy and application DTO libraries are not required.
 
-The host owns orders, prices, permissions, fulfillment and HTTP. Payments owns hosted Checkout, embedded Payment Element, authorization, refund reservations, signed delivery processing and durable operation journals.
+The host owns orders, prices, permissions, fulfillment and HTTP. Payments owns hosted Checkout, embedded Payment Element, authorization, refund reservations, signed delivery processing, ledger delivery and durable operation journals.
 
 ## Setup
 
@@ -76,6 +76,10 @@ Return the client secret only to the authorized buyer. A repeated start uses the
 
 Settle from a signed webhook or an authorized server read. A successful automatic payment is final without a capture call. The settled attempt and authorized timeline expose the charge ID and any available card brand, last four, expiration and wallet. A payment amount or currency mismatch, or payment observed after a confirmed closure, enters `payment_exception`. Treat it as an unresolved payment. Close returns true only after Stripe confirms cancellation, and a temporary provider outage leaves the attempt open.
 
+## Host ledger and refunds
+
+Bind `PaymentLedgerProjector` to mirror committed facts and schedule `nvl:payments:retry` to deliver outstanding facts. `PaymentRefunds::refund` accepts an attempt model, attempt ID, or Stripe Charge ID and keeps the host reason on the refund. See the [host ledger contract](docs/host-ledger.md) for reason mapping, replay, and split refunds.
+
 ## Consumer webhook endpoint
 
 Register the host endpoint and pass the untouched request body and Stripe signature to the public service:
@@ -88,7 +92,7 @@ Route::post('/payments/stripe/webhook', function (Request $request, PaymentWebho
 });
 ```
 
-The service verifies the signing secret, freshness, envelope, account and mode before processing. It owns replay receipts and current Stripe reads. The consumer selects its route name, HTTP middleware and exception mapping. Doctor checks package readiness without requiring a specific consumer route name. Process webhooks outside an ambient Payments transaction so provider reads precede local locking. A browser checkout return is not payment evidence.
+The service verifies the signing secret, freshness, envelope, account and mode before processing. It owns replay receipts and current Stripe reads. Subscribe to Stripe refund updates for timely refund reconciliation. Custom gateways can implement `PaymentRefundLookup` to resolve a refund event to its authoritative payment. The consumer selects its route name, HTTP middleware and exception mapping. Doctor checks package readiness without requiring a specific consumer route name. Process webhooks outside an ambient Payments transaction so provider reads precede local locking. A browser checkout return is not payment evidence.
 
 ## Recovery and ownership
 

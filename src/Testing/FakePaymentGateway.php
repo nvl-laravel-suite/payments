@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Container\Container;
 use Nvl\Payments\Contracts\PaymentGateway;
 use Nvl\Payments\Contracts\PaymentIntentGateway;
+use Nvl\Payments\Contracts\PaymentRefundLookup;
 use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Testing\FakeCalls;
@@ -24,7 +25,7 @@ use TypeError;
  * @phpstan-import-type StripeIntentState from \Nvl\Payments\Contracts\PaymentIntentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
  */
-final class FakePaymentGateway implements PaymentIntentGateway
+class FakePaymentGateway implements PaymentIntentGateway, PaymentRefundLookup
 {
     use FakeCalls;
 
@@ -198,6 +199,12 @@ final class FakePaymentGateway implements PaymentIntentGateway
         return $this->intentState($this->invoke('intent', ['intentId' => $intentId]));
     }
 
+    /** @return StripeRefundState */
+    public function readRefund(string $refundId): array
+    {
+        return $this->refundState($this->invoke('readRefund', ['refundId' => $refundId]));
+    }
+
     /** @return StripeIntentState */
     private function intentState(mixed $result): array
     {
@@ -278,16 +285,16 @@ final class FakePaymentGateway implements PaymentIntentGateway
     /**
      * @param  array<array-key, mixed>  $state
      *
-     * @phpstan-assert array{releasedHoldRefundIds?:list<string>,cardBrand?:?string,cardLastFour?:?string,cardExpiryMonth?:?int,cardExpiryYear?:?int,wallet?:?string,failureCode?:?string,clientSecret?:?string,operationKey?:?string,...} $state
+     * @phpstan-assert array{releasedHoldRefundIds?:list<string>,cardBrand?:?string,cardLastFour?:?string,cardExpiryMonth?:?int,cardExpiryYear?:?int,wallet?:?string,providerOccurredAt?:?int,failureCode?:?string,failureReference?:?string,clientSecret?:?string,operationKey?:?string,...} $state
      */
     private function validatePaymentExtras(array $state): void
     {
-        foreach (['cardBrand', 'cardLastFour', 'wallet', 'failureCode', 'clientSecret', 'operationKey'] as $field) {
+        foreach (['cardBrand', 'cardLastFour', 'wallet', 'failureCode', 'failureReference', 'clientSecret', 'operationKey'] as $field) {
             if (isset($state[$field]) && ! is_string($state[$field])) {
                 throw new TypeError('FakePaymentGateway requires string values for payment detail '.$field.'.');
             }
         }
-        foreach (['cardExpiryMonth', 'cardExpiryYear'] as $field) {
+        foreach (['cardExpiryMonth', 'cardExpiryYear', 'providerOccurredAt'] as $field) {
             if (isset($state[$field]) && ! is_int($state[$field])) {
                 throw new TypeError('FakePaymentGateway requires integer values for payment detail '.$field.'.');
             }
@@ -321,7 +328,21 @@ final class FakePaymentGateway implements PaymentIntentGateway
             throw new TypeError('FakePaymentGateway requires complete, correctly typed StripeRefundState facts.');
         }
 
+        $this->validateRefundTimestamp($result);
+
         return $result;
+    }
+
+    /**
+     * @param  array<array-key,mixed>  $state
+     *
+     * @phpstan-assert array{providerOccurredAt?:?int,...} $state
+     */
+    private function validateRefundTimestamp(array $state): void
+    {
+        if (isset($state['providerOccurredAt']) && ! is_int($state['providerOccurredAt'])) {
+            throw new TypeError('FakePaymentGateway requires an integer provider refund timestamp.');
+        }
     }
 
     /**
@@ -333,6 +354,6 @@ final class FakePaymentGateway implements PaymentIntentGateway
      */
     protected function fakeMethods(): array
     {
-        return ['createCheckout', 'expireCheckout', 'checkout', 'payment', 'resolveExisting', 'capture', 'cancel', 'refund', 'refunds', 'createIntent', 'intent'];
+        return ['createCheckout', 'expireCheckout', 'checkout', 'payment', 'resolveExisting', 'capture', 'cancel', 'refund', 'refunds', 'createIntent', 'intent', 'createCustomer', 'readRefund'];
     }
 }

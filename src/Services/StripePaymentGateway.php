@@ -9,6 +9,7 @@ use Closure;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Nvl\Payments\Contracts\PaymentIntentGateway;
+use Nvl\Payments\Contracts\PaymentRefundLookup;
 use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Exceptions\ProviderUnavailable;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
@@ -33,7 +34,7 @@ use UnexpectedValueException;
  *
  * @internal
  */
-final class StripePaymentGateway implements PaymentIntentGateway
+final class StripePaymentGateway implements PaymentIntentGateway, PaymentRefundLookup
 {
     public const string API_VERSION = '2026-10-28.endive';
 
@@ -169,11 +170,11 @@ final class StripePaymentGateway implements PaymentIntentGateway
         $this->positiveAmount($amountMinor);
         $this->paymentField($paymentId);
         $options = $this->options($idempotencyKey);
-        if (! in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true)) {
-            throw new InvalidArgumentException('Unsupported Stripe refund reason.');
-        }
         $payment = $this->payment($paymentId);
-        $params = $this->paymentFilter($paymentId) + ['amount' => $amountMinor, 'reason' => $reason, 'metadata' => ['payment_operation_key' => $idempotencyKey]];
+        $params = $this->paymentFilter($paymentId) + ['amount' => $amountMinor, 'metadata' => ['payment_operation_key' => $idempotencyKey]];
+        if (in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true)) {
+            $params['reason'] = $reason;
+        }
 
         return $this->refundState($this->request('create_refund', fn () => $this->client->refunds->create($params, $options)), $payment['livemode']);
     }
@@ -198,6 +199,20 @@ final class StripePaymentGateway implements PaymentIntentGateway
         }
 
         return $states;
+    }
+
+    /** @return StripeRefundState */
+    public function readRefund(string $refundId): array
+    {
+        if (preg_match('/^(re|pyr)_[A-Za-z0-9]+$/D', $refundId) !== 1) {
+            throw new InvalidArgumentException('Expected a Stripe Refund ID.');
+        }
+        $this->verifyAccount();
+        $refund = $this->request('retrieve_refund', fn () => $this->client->refunds->retrieve($refundId));
+        $reference = $this->reference($refund->payment_intent) ?? $this->reference($refund->charge)
+            ?? throw new UnexpectedValueException('Stripe Refund has no payment identity.');
+
+        return $this->refundState($refund, $this->payment($reference)['livemode']);
     }
 
     /** @return StripeIntentState */
@@ -242,7 +257,7 @@ final class StripePaymentGateway implements PaymentIntentGateway
         ];
     }
 
-    /** @return array{cardBrand:?string,cardLastFour:?string,cardExpiryMonth:?int,cardExpiryYear:?int,wallet:?string} */
+    /** @return array{cardBrand:?string,cardLastFour:?string,cardExpiryMonth:?int,cardExpiryYear:?int,wallet:?string,providerOccurredAt:?int} */
     private function chargeDetails(?Charge $charge): array
     {
         $details = $charge->payment_method_details ?? null;
@@ -260,6 +275,7 @@ final class StripePaymentGateway implements PaymentIntentGateway
             'cardExpiryMonth' => is_int($month) ? $month : null,
             'cardExpiryYear' => is_int($year) ? $year : null,
             'wallet' => is_string($walletType) ? $walletType : null,
+            'providerOccurredAt' => $charge->created ?? null,
         ];
     }
 
@@ -353,7 +369,9 @@ final class StripePaymentGateway implements PaymentIntentGateway
         $partialStatus = $partialAuthorization instanceof StripeObject ? $partialAuthorization['status'] : null;
 
         return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, ...($charge === null ? ['refundedAmountMinor' => 0] : $this->capturedRefundFacts($charge)), 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null, ...$this->chargeDetails($charge),
+            'providerOccurredAt' => $intent->canceled_at ?? $charge->created ?? $intent->created ?? null,
             'failureCode' => $intent->last_payment_error->decline_code ?? $intent->last_payment_error->code ?? null,
+            'failureReference' => $this->reference($intent->last_payment_error->charge ?? null),
         ];
     }
 
@@ -427,7 +445,7 @@ final class StripePaymentGateway implements PaymentIntentGateway
      */
     private function refundState(Refund $refund, bool $livemode): array
     {
-        return ['refundId' => $refund->id, 'paymentIntentId' => $this->reference($refund->payment_intent), 'chargeId' => $this->reference($refund->charge), 'accountId' => $this->accountId, 'livemode' => $livemode, 'amountMinor' => $refund->amount, 'currency' => $refund->currency, 'status' => $refund->status ?? 'pending', 'reason' => $refund->reason, 'operationKey' => $this->metadataString($refund->metadata ?? null, 'payment_operation_key')];
+        return ['refundId' => $refund->id, 'paymentIntentId' => $this->reference($refund->payment_intent), 'chargeId' => $this->reference($refund->charge), 'accountId' => $this->accountId, 'livemode' => $livemode, 'amountMinor' => $refund->amount, 'currency' => $refund->currency, 'status' => $refund->status ?? 'pending', 'reason' => $refund->reason, 'operationKey' => $this->metadataString($refund->metadata ?? null, 'payment_operation_key'), 'providerOccurredAt' => $refund->created ?? null];
     }
 
     /** Read optional order correlation without trusting non-string metadata. */

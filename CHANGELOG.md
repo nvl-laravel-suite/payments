@@ -5,6 +5,10 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+- Deliver versioned payment and refund facts after the outer Payments commit through a durable, replayable outbox.
+- Allow refunds against a stored payment attempt or Charge ID, retain host reason codes, and preserve per-payment reservation caps.
+- Record refund lifecycle transitions and recover failed ledger deliveries using the same fact IDs.
+
 ## [7.2.0] - 2026-11-16
 
 - Add an authorized Payment Element lifecycle with one immutable PaymentIntent per host attempt UUID. Expose card and wallet details and record quarantined payment mismatches.

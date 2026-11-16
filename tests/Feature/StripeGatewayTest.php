@@ -227,3 +227,10 @@ it('classifies errors on subsequent Stripe list pages', function (): void {
     ];
     expect(fn () => $this->gateway->refunds('pi_one'))->toThrow(ProviderUnavailable::class);
 });
+
+it('omits an unmapped host reason from the Stripe charge refund request', function (): void {
+    $this->transport->responses = [$this->charge, $this->intent, $this->refund];
+    $this->gateway->refund('ch_one', 200, 'return.damaged', 'refund-key');
+    $request = end($this->transport->requests);
+    expect($request['params'])->toHaveKey('charge', 'ch_one')->not->toHaveKey('reason');
+});

@@ -1,5 +1,11 @@
 # Upgrading NVL Payments
 
+## 7.3.0 · Host ledger and per-payment refunds
+
+Apply the additive ledger outbox migration. Bind `PaymentLedgerProjector` to mirror facts into host records. Use a unique fact receipt and commit it atomically with the ledger changes. Throw when projection fails so the fact remains recoverable. Run the ledger retry entry point regularly.
+
+Allocate split-tender refunds in the host and use a distinct stable operation UUID for each allocation. Add literal host reason mappings under `refund_reasons` where Stripe has an equivalent. Keep the original host reason on the ledger. [Stripe refund creation](https://docs.stripe.com/api/refunds/create) · [Stripe refund lifecycle](https://docs.stripe.com/refunds#refunds-that-require-action)
+
 ## 7.2.0 · Embedded Payment Element and capture modes
 
 Apply the additive embedded attempt migration. Configure the publishable key for the Stripe account mode and authorize `start_embedded`, `settle_embedded`, `close_embedded` and `recover_embedded` through the host management contract.

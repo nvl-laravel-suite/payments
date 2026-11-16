@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Str;
+use Nvl\Payments\Contracts\PaymentLedgerProjector;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Exceptions\ProviderUnavailable;
+use Nvl\Payments\Ledger\PaymentExceptionRaised;
+use Nvl\Payments\Ledger\PaymentLedgerFact;
+use Nvl\Payments\Ledger\PaymentSucceeded;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
 use Nvl\Payments\Services\EmbeddedPayments;
 use Nvl\Payments\Services\PaymentCheckout;
+use Nvl\Payments\Services\PaymentLedgerDelivery;
 use Nvl\Payments\Services\PaymentReadService;
 use Nvl\Payments\Services\PaymentsAvailability;
+use Nvl\Payments\Services\PaymentStateSyncer;
 use Nvl\Payments\Testing\FakePaymentGateway;
 use Nvl\Payments\Tests\PaymentsSchemaTestCase;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
@@ -100,7 +106,55 @@ it('quarantines distinct succeeded mismatch outcomes without recording captured 
     $this->gateway->willReturn('intent', $succeeded);
     expect($payments->start('order-1', $this->attemptId, $this->actor)['status'])->toBe('payment_exception');
     expect(PaymentAttempt::sole())->state->toBe('payment_exception')->exception_reason->toBe($reason)->captured_amount_minor->toBe(0);
+    $row = PaymentLedgerDelivery::query()->sole();
+    app()->instance(PaymentLedgerProjector::class, $projector = Mockery::mock(PaymentLedgerProjector::class));
+    $projector->shouldReceive('project')->once()->with(Mockery::on(fn ($fact) => $fact instanceof PaymentExceptionRaised && $fact->reason === $reason));
+    expect(app(PaymentLedgerDelivery::class)->deliver($row->id))->toBeTrue();
 })->with([[['amountMinor' => 1201], 'amount_mismatch'], [['capturedAmountMinor' => 1199], 'amount_mismatch'], [['currency' => 'usd'], 'currency_mismatch'], [[], 'paid_after_close']]);
+
+it('publishes typed success only after outer commit, rolls back failed transactions, and retries the same ID', function (): void {
+    $facts = embeddedStripeFacts($this->attemptId);
+    $this->gateway->willReturn('createIntent', $facts);
+    app(EmbeddedPayments::class)->start('order-1', $this->attemptId, $this->actor);
+    $failure = new RuntimeException('host ledger down');
+    $projector = new class($failure) implements PaymentLedgerProjector
+    {
+        public bool $failing = true;
+
+        /** @var list<PaymentLedgerFact> */
+        public array $calls = [];
+
+        public function __construct(private readonly Throwable $failure) {}
+
+        public function project(PaymentLedgerFact $fact): void
+        {
+            expect((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0);
+            if ($this->failing) {
+                throw $this->failure;
+            }
+            $this->calls[] = $fact;
+        }
+    };
+    app()->instance(PaymentLedgerProjector::class, $projector);
+    $success = array_replace($facts, ['status' => 'succeeded', 'capturedAmountMinor' => 1200, 'chargeId' => 'ch_embedded', 'cardBrand' => 'visa', 'cardLastFour' => '4242', 'wallet' => 'apple_pay', 'providerOccurredAt' => 1820000000]);
+    $connection = (new PaymentAttempt)->getConnection();
+    $connection->beginTransaction();
+    app(PaymentStateSyncer::class)->sync($success);
+    expect($projector->calls)->toBe([]);
+    $connection->rollBack();
+    expect(PaymentLedgerDelivery::query()->count())->toBe(0);
+    $connection->transaction(fn () => app(PaymentStateSyncer::class)->sync($success));
+    $row = PaymentLedgerDelivery::query()->sole();
+    expect($row->delivered_at)->toBeNull();
+    $delivery = app(PaymentLedgerDelivery::class);
+    expect(fn () => $delivery->deliver($row->id))->toThrow(RuntimeException::class, $failure->getMessage());
+    expect(PaymentLedgerDelivery::query()->sole()->delivered_at)->toBeNull();
+    $projector->failing = false;
+    expect($delivery->retry())->toBe(1);
+    expect($projector->calls[0])->toBeInstanceOf(PaymentSucceeded::class)->cardLastFour->toBe('4242')->amountMinor->toBe(1200);
+    expect($delivery->deliver($row->id, replay: true))->toBeTrue();
+    expect(array_map(fn (PaymentLedgerFact $fact): string => $fact->id(), $projector->calls))->toBe([$row->id, $row->id]);
+});
 
 it('checks live key mode and blocks Stripe-bound operations inside the Payments transaction', function (): void {
     config(['nvl-payments.stripe.secret' => 'rk_live_fixture', 'nvl-payments.stripe.livemode' => true]);
