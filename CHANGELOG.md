@@ -5,9 +5,17 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+## [7.2.0] - 2026-11-16
+
 - Add an authorized Payment Element lifecycle with one immutable PaymentIntent per host attempt UUID. Expose card and wallet details and record quarantined payment mismatches.
 - Support `automatic`, `automatic_async` and `manual` capture while preserving the hosted Checkout default and existing manual flow.
 - Read before canceling, recover from Stripe unexpected-state races, and release a reservation only on confirmed cancellation.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- add embedded payment intents and confirmed cancellation
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.1.0] - 2026-11-16
 
