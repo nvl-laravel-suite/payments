@@ -5,9 +5,17 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+## [7.4.0] - 2026-11-16
+
 - Add optional Stripe customer mappings using a stable host reference and idempotent creation. Reuse existing Stripe customers without rewriting their details.
 - Store verified webhook identifiers in a durable inbox, queue canonical Stripe reads, and recover interrupted work with capped claims.
 - Add an opt-in signed Stripe endpoint, an explicit asynchronous host intake API, and a webhook recovery sweep.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- add customer mappings and the signed webhook inbox
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.3.0] - 2026-11-16
 
