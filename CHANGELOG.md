@@ -5,9 +5,18 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+## [7.6.0] - 2026-11-16
+
 ### Changed
 
 - Declare the `ext-ctype` and `symfony/http-foundation` runtime requirements already used by the webhook receiver, inbox and Doctor.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- adoption flow, PostgreSQL proof, release health and 7.2 floors
+- Merge latest main into consumer PostgreSQL validation
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.5.0] - 2026-11-16
 
