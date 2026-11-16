@@ -189,8 +189,10 @@ it('rejects reconciliation within a host transaction before Stripe reads', funct
 
 it('reconciles on the configured connection without changing default storage', function (): void {
     config(['database.connections.payments_secondary' => ['driver' => 'sqlite', 'database' => ':memory:'], 'nvl-payments.connection' => 'payments_secondary']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
-    $migration->up();
+    $migrations = array_map(fn ($path) => require $path, glob(__DIR__.'/../../database/migrations/payments/*.php'));
+    foreach ($migrations as $migration) {
+        $migration->up();
+    }
     $secondary = createRefundAttempt();
     $this->gateway->shouldReceive('payment')->andReturnUsing(function () {
         expect((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0);

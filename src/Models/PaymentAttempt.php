@@ -34,6 +34,13 @@ use Nvl\Support\Ownership\Contracts\Ownable;
  * @property string|null $stripe_charge_id
  * @property string|null $stripe_account_id
  * @property bool|null $stripe_livemode
+ * @property list<string>|null $embedded_methods
+ * @property string|null $exception_reason
+ * @property string|null $card_brand
+ * @property string|null $card_last_four
+ * @property int|null $card_expiry_month
+ * @property int|null $card_expiry_year
+ * @property string|null $card_wallet
  * @property string|null $capture_method
  * @property int $captured_amount_minor
  * @property int $refunded_amount_minor
@@ -67,6 +74,7 @@ class PaymentAttempt extends Model implements Ownable
         'order_reference', 'order_revision', 'amount_minor', 'currency', 'origin', 'state',
         'reservation_key', 'checkout_url', 'stripe_checkout_session_id', 'stripe_payment_intent_id',
         'stripe_charge_id', 'stripe_account_id', 'stripe_livemode', 'capture_method',
+        'embedded_methods', 'exception_reason', 'card_brand', 'card_last_four', 'card_expiry_month', 'card_expiry_year', 'card_wallet',
         'captured_amount_minor', 'refunded_amount_minor', 'expires_at', 'last_synced_at', 'last_reconcile_attempt_at',
     ];
 
@@ -75,6 +83,9 @@ class PaymentAttempt extends Model implements Ownable
     {
         return [
             'amount_minor' => 'integer',
+            'embedded_methods' => 'array',
+            'card_expiry_month' => 'integer',
+            'card_expiry_year' => 'integer',
             'captured_amount_minor' => 'integer',
             'refunded_amount_minor' => 'integer',
             'stripe_livemode' => 'boolean',

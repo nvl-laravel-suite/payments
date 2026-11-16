@@ -59,6 +59,9 @@ final class PaymentReconciliation
         if (! Str::isUuid($operationId)) {
             throw new InvalidArgumentException('A valid operation UUID is required.');
         }
+        if ($attempt->origin === 'embedded' && $attempt->exception_reason !== null) {
+            throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'An embedded payment exception cannot be accepted as payment.');
+        }
         $existing = PaymentOperation::query()->find($operationId);
         if ($existing !== null) {
             $operation = $this->journal->reserve('resolve_payment_exception', $attempt->order_reference, $operationId, (string) $actorId, $attemptId, null);
@@ -82,7 +85,7 @@ final class PaymentReconciliation
                 $this->syncer->sync($payment);
                 $current->refresh();
                 $state = $current->refunded_amount_minor > 0 ? ($current->refunded_amount_minor === $current->captured_amount_minor ? 'refunded' : 'partially_refunded') : 'captured';
-                $current->update(['state' => $state]);
+                $current->update(['state' => $state, 'exception_reason' => null]);
                 $this->journal->complete($operation, $current->stripe_payment_intent_id ?? $current->stripe_charge_id ?? $current->id);
                 $event = new PaymentStateChanged($current->order_reference, $current->id, 'payment_exception', $state, $current->stripe_payment_intent_id, $current->stripe_charge_id, $current->stripe_checkout_session_id);
                 ($this->domainEvents ?? DomainEventDispatcher::current())->dispatch($event, $connection);
@@ -112,14 +115,18 @@ final class PaymentReconciliation
             $this->assertCheckout($attempt, $checkout, $sessionId);
         }
         $reference = $checkout['paymentIntentId'] ?? $attempt->stripe_payment_intent_id ?? $attempt->stripe_charge_id;
-        $payment = $reference === null ? null : $this->gateway->payment($reference);
+        $payment = match (true) {
+            $reference === null => null,
+            $attempt->origin === 'embedded' && $attempt->expires_at?->isPast() && $attempt->captured_amount_minor === 0 => $this->gateway->cancel($reference, 'payments:close:'.$attempt->id),
+            default => $this->gateway->payment($reference),
+        };
         if ($payment !== null) {
             if ($reference !== $payment['paymentIntentId'] && $reference !== $payment['chargeId']) {
                 throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe returned a different payment.');
             }
             $this->syncer->assertMatches($attempt, $payment);
         }
-        $refunds = $payment === null || $payment['capturedAmountMinor'] === 0 ? [] : $this->gateway->refunds($reference);
+        $refunds = $reference === null || $payment === null || $payment['capturedAmountMinor'] === 0 || $this->syncer->exceptionReason($attempt, $payment) !== null ? [] : $this->gateway->refunds($reference);
         $connection->transaction(function () use ($attempt, $checkout, $payment, $refunds, $recoverySessionId, $observedRefunds): void {
             $current = PaymentsModelRegistry::attemptQuery()->lockForUpdate()->findOrFail($attempt->id);
             if ($current->getRawOriginal() !== $attempt->getRawOriginal()) {
@@ -134,6 +141,11 @@ final class PaymentReconciliation
             }
             if ($payment !== null) {
                 $this->syncer->assertMatches($current, $payment);
+                if ($this->syncer->exceptionReason($current, $payment) !== null) {
+                    $this->syncer->sync($payment);
+
+                    return;
+                }
                 if ($current->stripe_payment_intent_id === null && $payment['paymentIntentId'] !== null) {
                     $current->update(['stripe_payment_intent_id' => $payment['paymentIntentId']]);
                 }

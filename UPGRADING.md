@@ -1,5 +1,13 @@
 # Upgrading NVL Payments
 
+## 7.2.0 · Embedded Payment Element and capture modes
+
+Apply the additive embedded attempt migration. Configure the publishable key for the Stripe account mode and authorize `start_embedded`, `settle_embedded`, `close_embedded` and `recover_embedded` through the host management contract.
+
+Generate a globally unique attempt UUID on the host and reuse it when retrying the same immutable order snapshot. Use the returned client secret only on the authorized checkout page. Call `EmbeddedPayments::settle()` from the host to confirm payment. Keep the reservation when Stripe is unreachable or the intent is still processing. Stripe-confirmed cancellation releases the reservation.
+
+The adapter pins Stripe API version `2026-10-28.endive` for `allowed_payment_method_types`. [PaymentIntent creation](https://docs.stripe.com/api/payment_intents/create) · [Checkout creation](https://docs.stripe.com/api/checkout/sessions/create) · [PaymentIntent cancellation](https://docs.stripe.com/api/payment_intents/cancel)
+
 ## 7.1.0 · Provider safety and financial storage
 
 Check live deployments for matching `stripe.livemode`, account and Stripe API key, then explicitly set `allow_live`. Preserve the prior `allowed_currencies` configuration when accepting currencies besides EUR. Configure minimums in integer minor units.

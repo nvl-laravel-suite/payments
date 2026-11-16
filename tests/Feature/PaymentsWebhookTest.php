@@ -240,3 +240,15 @@ it('keeps the raw webhook body and signature out of exception traces', function 
 
     expect($frame['args'] ?? [])->toHaveCount(2)->each->toBeInstanceOf(SensitiveParameterValue::class);
 });
+
+it('quarantines a mismatched embedded success read through the existing signed webhook API', function (): void {
+    $attempt = webhookAttempt(['origin' => 'embedded', 'stripe_checkout_session_id' => null]);
+    $this->gateway->shouldReceive('payment')->once()->with('pi_one')->andReturn(webhookPayment(['currency' => 'usd']));
+
+    deliverWebhook(webhookPayload())->assertOk();
+
+    expect($attempt->refresh())->state->toBe('payment_exception')
+        ->exception_reason->toBe('currency_mismatch')
+        ->captured_amount_minor->toBe(0);
+    expect(PaymentWebhookEvent::sole()->status)->toBe('processed');
+});

@@ -10,6 +10,7 @@ use Nvl\Payments\Console\Commands\PaymentsDoctorCommand;
 use Nvl\Payments\Console\Commands\PaymentsReconcileCommand;
 use Nvl\Payments\Contracts\ExistingPaymentOwnership;
 use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Contracts\PaymentIntentGateway;
 use Nvl\Payments\Contracts\PaymentManagementAccess;
 use Nvl\Payments\Contracts\PaymentOrderProvider;
 use Nvl\Payments\Contracts\PaymentOwnerWorklist;
@@ -66,10 +67,18 @@ final class PaymentsServiceProvider extends ServiceProvider implements Ownership
             $account = config('nvl-payments.stripe.account_id');
 
             return new StripePaymentGateway(
-                new StripeClient(['api_key' => is_string($secret) && preg_match('/^[^\s]+$/D', $secret) === 1 ? $secret : null]),
+                new StripeClient(['api_key' => is_string($secret) && preg_match('/^[^\s]+$/D', $secret) === 1 ? $secret : null, 'stripe_version' => StripePaymentGateway::API_VERSION]),
                 is_string($account) ? $account : '',
                 config('nvl-payments.stripe.livemode') === true,
             );
+        });
+        $this->app->bindIf(PaymentIntentGateway::class, function (): PaymentIntentGateway {
+            $gateway = $this->app->make(PaymentGateway::class);
+            if (! $gateway instanceof PaymentIntentGateway) {
+                throw new \LogicException('Bind a PaymentIntentGateway to use Payment Element.');
+            }
+
+            return $gateway;
         });
         $this->app->bindIf(PaymentOwnerWorklist::class, StoredPaymentOwnerWorklist::class);
         $this->app->bindIf(PaymentOrderProvider::class, DenyPaymentOrderProvider::class);

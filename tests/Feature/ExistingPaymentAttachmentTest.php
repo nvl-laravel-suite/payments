@@ -155,8 +155,10 @@ it('rejects outer transactions before reserving an operation', function (): void
 
 it('uses the configured Payments connection for its journal attempt and after-commit event', function (): void {
     config(['database.connections.payments_test' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true], 'nvl-payments.connection' => 'payments_test']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
-    $migration->up();
+    $migrations = array_map(fn ($path) => require $path, glob(__DIR__.'/../../database/migrations/payments/*.php'));
+    foreach ($migrations as $migration) {
+        $migration->up();
+    }
     Event::listen(PaymentStateChanged::class, function (): void {
         expect((new PaymentAttempt)->getConnection()->getName())->toBe('payments_test')
             ->and((new PaymentAttempt)->getConnection()->transactionLevel())->toBe(0)

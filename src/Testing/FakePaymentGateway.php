@@ -7,6 +7,8 @@ namespace Nvl\Payments\Testing;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Container\Container;
 use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Contracts\PaymentIntentGateway;
+use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Nvl\Support\Testing\FakeCalls;
 use TypeError;
@@ -19,9 +21,10 @@ use TypeError;
  * @phpstan-import-type HostedCheckout from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripeCheckoutState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeIntentState from \Nvl\Payments\Contracts\PaymentIntentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
  */
-final class FakePaymentGateway implements PaymentGateway
+final class FakePaymentGateway implements PaymentIntentGateway
 {
     use FakeCalls;
 
@@ -122,10 +125,18 @@ final class FakePaymentGateway implements PaymentGateway
      */
     public function cancel(string $paymentIntentId, string $idempotencyKey): array
     {
-        $result = $this->invoke('cancel', [
-            'paymentIntentId' => $paymentIntentId,
-            'idempotency_key' => $idempotencyKey,
-        ]);
+        try {
+            $result = $this->invoke('cancel', [
+                'paymentIntentId' => $paymentIntentId,
+                'idempotency_key' => $idempotencyKey,
+            ]);
+        } catch (ProviderRefused $failure) {
+            if ($failure->stripeCode === 'payment_intent_unexpected_state') {
+                return $this->payment($paymentIntentId);
+            }
+
+            throw $failure;
+        }
 
         return $this->paymentState($result);
     }
@@ -170,6 +181,27 @@ final class FakePaymentGateway implements PaymentGateway
         }
 
         return $refunds;
+    }
+
+    /** @return StripeIntentState */
+    public function createIntent(OrderPaymentSnapshot $order, string $captureMethod, array $allowedMethods, ?string $customerId, string $idempotencyKey): array
+    {
+        return $this->intentState($this->invoke('createIntent', [
+            'order' => $order, 'captureMethod' => $captureMethod, 'allowedMethods' => $allowedMethods,
+            'customerId' => $customerId, 'idempotency_key' => $idempotencyKey,
+        ]));
+    }
+
+    /** @return StripeIntentState */
+    public function intent(string $intentId): array
+    {
+        return $this->intentState($this->invoke('intent', ['intentId' => $intentId]));
+    }
+
+    /** @return StripeIntentState */
+    private function intentState(mixed $result): array
+    {
+        return $this->paymentState($result);
     }
 
     /** @return HostedCheckout */
@@ -238,7 +270,7 @@ final class FakePaymentGateway implements PaymentGateway
             throw new TypeError('FakePaymentGateway requires complete, correctly typed StripePaymentState facts.');
         }
 
-        $this->validateReleasedHoldRefundIds($result);
+        $this->validatePaymentExtras($result);
 
         return $result;
     }
@@ -246,17 +278,25 @@ final class FakePaymentGateway implements PaymentGateway
     /**
      * @param  array<array-key, mixed>  $state
      *
-     * @phpstan-assert array{releasedHoldRefundIds?: list<string>, ...} $state
+     * @phpstan-assert array{releasedHoldRefundIds?:list<string>,cardBrand?:?string,cardLastFour?:?string,cardExpiryMonth?:?int,cardExpiryYear?:?int,wallet?:?string,failureCode?:?string,clientSecret?:?string,operationKey?:?string,...} $state
      */
-    private function validateReleasedHoldRefundIds(array $state): void
+    private function validatePaymentExtras(array $state): void
     {
-        if (! array_key_exists('releasedHoldRefundIds', $state)) {
-            return;
+        foreach (['cardBrand', 'cardLastFour', 'wallet', 'failureCode', 'clientSecret', 'operationKey'] as $field) {
+            if (isset($state[$field]) && ! is_string($state[$field])) {
+                throw new TypeError('FakePaymentGateway requires string values for payment detail '.$field.'.');
+            }
         }
-
-        $ids = $state['releasedHoldRefundIds'];
-        if (! is_array($ids) || array_values(array_filter($ids, is_string(...))) !== $ids) {
-            throw new TypeError('FakePaymentGateway requires released hold refund IDs as a list of strings.');
+        foreach (['cardExpiryMonth', 'cardExpiryYear'] as $field) {
+            if (isset($state[$field]) && ! is_int($state[$field])) {
+                throw new TypeError('FakePaymentGateway requires integer values for payment detail '.$field.'.');
+            }
+        }
+        if (array_key_exists('releasedHoldRefundIds', $state)) {
+            $ids = $state['releasedHoldRefundIds'];
+            if (! is_array($ids) || array_values(array_filter($ids, is_string(...))) !== $ids) {
+                throw new TypeError('FakePaymentGateway requires released hold refund IDs as a list of strings.');
+            }
         }
     }
 
@@ -293,6 +333,6 @@ final class FakePaymentGateway implements PaymentGateway
      */
     protected function fakeMethods(): array
     {
-        return ['createCheckout', 'expireCheckout', 'checkout', 'payment', 'resolveExisting', 'capture', 'cancel', 'refund', 'refunds'];
+        return ['createCheckout', 'expireCheckout', 'checkout', 'payment', 'resolveExisting', 'capture', 'cancel', 'refund', 'refunds', 'createIntent', 'intent'];
     }
 }

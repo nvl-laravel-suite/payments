@@ -32,6 +32,25 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Payments\\Contracts\\PaymentIntentGateway": {
+            "kind": "interface",
+            "file": "src/Contracts/PaymentIntentGateway.php",
+            "methods": [
+                "cancel",
+                "capture",
+                "checkout",
+                "createCheckout",
+                "createIntent",
+                "expireCheckout",
+                "intent",
+                "payment",
+                "refund",
+                "refunds",
+                "resolveExisting"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Contracts\\PaymentManagementAccess": {
             "kind": "interface",
             "file": "src/Contracts/PaymentManagementAccess.php",
@@ -220,9 +239,16 @@
                 "amount_minor",
                 "capture_method",
                 "captured_amount_minor",
+                "card_brand",
+                "card_expiry_month",
+                "card_expiry_year",
+                "card_last_four",
+                "card_wallet",
                 "checkout_url",
                 "created_at",
                 "currency",
+                "embedded_methods",
+                "exception_reason",
                 "expires_at",
                 "id",
                 "last_reconcile_attempt_at",
@@ -350,6 +376,19 @@
                 "TABLE"
             ]
         },
+        "Nvl\\Payments\\Services\\EmbeddedPayments": {
+            "kind": "class",
+            "file": "src/Services/EmbeddedPayments.php",
+            "methods": [
+                "__construct",
+                "close",
+                "recover",
+                "settle",
+                "start"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Payments\\Services\\PaymentAuthorizations": {
             "kind": "class",
             "file": "src/Services/PaymentAuthorizations.php",
@@ -445,8 +484,10 @@
                 "capture",
                 "checkout",
                 "createCheckout",
+                "createIntent",
                 "expireCheckout",
                 "fake",
+                "intent",
                 "payment",
                 "refund",
                 "refunds",

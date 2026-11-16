@@ -16,12 +16,18 @@ return [
     'migrations' => ['enabled' => false, 'allow_destructive_rollback' => false],
     'stripe' => [
         'secret' => env('NVL_PAYMENTS_STRIPE_SECRET'),
+        'publishable_key' => env('NVL_PAYMENTS_STRIPE_PUBLISHABLE_KEY'),
         'webhook_secret' => env('NVL_PAYMENTS_STRIPE_WEBHOOK_SECRET'),
         'account_id' => env('NVL_PAYMENTS_STRIPE_ACCOUNT_ID'),
         'livemode' => false,
     ],
     'allowed_currencies' => ['EUR'],
     'minimum_amounts' => ['EUR' => 50],
+    'embedded' => [
+        'capture_method' => 'automatic_async',
+        'allowed_payment_method_types' => ['card'],
+        'expires_in_minutes' => 30,
+    ],
     'checkout' => [
         'return_hosts' => [],
         'expires_in_minutes' => 120,

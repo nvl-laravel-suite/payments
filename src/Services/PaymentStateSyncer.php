@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Payments\Services;
 
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Nvl\Payments\Enums\PaymentsResponseCode;
 use Nvl\Payments\Events\PaymentStateChanged;
 use Nvl\Payments\Exceptions\PaymentsException;
@@ -83,7 +83,21 @@ final class PaymentStateSyncer
                 return;
             }
             $this->assertMatches($attempt, $payment);
+            $reason = $this->exceptionReason($attempt, $payment);
+            if ($reason !== null) {
+                if ($attempt->state !== 'payment_exception') {
+                    $oldState = $attempt->state;
+                    $attempt->update(['state' => 'payment_exception', 'exception_reason' => $reason, 'last_synced_at' => now()]);
+                    Log::warning('payments.intent_mismatch', ['attempt_id' => $attempt->id, 'intent_id' => $payment['paymentIntentId'], 'reason' => $reason]);
+                    $this->domainEvents->dispatch(new PaymentStateChanged($attempt->order_reference, $attempt->id, $oldState, 'payment_exception', $payment['paymentIntentId'], $payment['chargeId'], null), $connection);
+                }
+
+                return;
+            }
             $state = $this->state($payment);
+            if ($attempt->origin === 'embedded' && $state === 'failed' && ($payment['failureCode'] ?? null) === null && $payment['status'] === 'requires_payment_method') {
+                $state = 'open';
+            }
             if ($state === null) {
                 return;
             }
@@ -103,6 +117,16 @@ final class PaymentStateSyncer
                 'captured_amount_minor' => $payment['capturedAmountMinor'], 'refunded_amount_minor' => $payment['refundedAmountMinor'],
                 'last_synced_at' => now(),
             ]);
+            if ($attempt->origin === 'embedded' && $payment['chargeId'] !== null) {
+                foreach ([
+                    'cardBrand' => 'card_brand', 'cardLastFour' => 'card_last_four', 'cardExpiryMonth' => 'card_expiry_month',
+                    'cardExpiryYear' => 'card_expiry_year', 'wallet' => 'card_wallet',
+                ] as $fact => $column) {
+                    if (array_key_exists($fact, $payment)) {
+                        $attempt->setAttribute($column, $payment[$fact]);
+                    }
+                }
+            }
             if ($state === 'canceled') {
                 $attempt->reservation_key = null;
             }
@@ -127,11 +151,30 @@ final class PaymentStateSyncer
             || ($attempt->stripe_payment_intent_id !== null && $attempt->stripe_payment_intent_id !== $payment['paymentIntentId'])
             || ($attempt->stripe_charge_id !== null && $attempt->stripe_charge_id !== $payment['chargeId'] && $attempt->captured_amount_minor > 0)
             || ($attempt->capture_method !== null && $attempt->capture_method !== $payment['captureMethod'])
-            || $attempt->amount_minor !== $payment['amountMinor'] || strtolower($attempt->currency) !== strtolower($payment['currency'])
-            || $payment['capturedAmountMinor'] < 0 || $payment['capturedAmountMinor'] > $payment['amountMinor']
-            || $payment['refundedAmountMinor'] < 0 || $payment['refundedAmountMinor'] > $payment['capturedAmountMinor']) {
+            || ($this->exceptionReason($attempt, $payment) === null && (
+                $attempt->amount_minor !== $payment['amountMinor'] || strtolower($attempt->currency) !== strtolower($payment['currency'])
+                || $payment['capturedAmountMinor'] < 0 || $payment['capturedAmountMinor'] > $payment['amountMinor']
+                || $payment['refundedAmountMinor'] < 0 || $payment['refundedAmountMinor'] > $payment['capturedAmountMinor']
+            ))) {
             throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Stripe payment does not match the reserved attempt.');
         }
+    }
+
+    /** @param StripePaymentState $payment */
+    public function exceptionReason(PaymentAttempt $attempt, array $payment): ?string
+    {
+        if ($attempt->origin !== 'embedded' || $payment['status'] !== 'succeeded') {
+            return null;
+        }
+
+        return $attempt->exception_reason ?? match (true) {
+            in_array($attempt->state, ['canceled', 'expired'], true) => 'paid_after_close',
+            strtolower($attempt->currency) !== strtolower($payment['currency']) => 'currency_mismatch',
+            $attempt->amount_minor !== $payment['amountMinor'],
+            $payment['capturedAmountMinor'] <= 0,
+            $payment['captureMethod'] !== 'manual' && $attempt->amount_minor !== $payment['capturedAmountMinor'] => 'amount_mismatch',
+            default => null,
+        };
     }
 
     /**

@@ -76,8 +76,10 @@ it('reads conservative balances using a fixed number of queries', function (int 
 
 it('reads only the configured Payments connection', function (): void {
     config(['database.connections.payments_secondary' => ['driver' => 'sqlite', 'database' => ':memory:'], 'nvl-payments.connection' => 'payments_secondary']);
-    $migration = require __DIR__.'/../../database/migrations/payments/2026_09_28_000001_nvl_payments_create_payments_tables.php';
-    $migration->up();
+    $migrations = array_map(fn ($path) => require $path, glob(__DIR__.'/../../database/migrations/payments/*.php'));
+    foreach ($migrations as $migration) {
+        $migration->up();
+    }
     $attempt = createRefundAttempt();
     $access = Mockery::mock(PaymentManagementAccess::class);
     $access->shouldReceive('assertCanManage');
@@ -85,4 +87,5 @@ it('reads only the configured Payments connection', function (): void {
     $timeline = app(PaymentReadService::class)->forOrder('order-1', new GenericUser(['id' => 'admin']));
     expect($timeline['payments'])->toHaveCount(1)->and($timeline['payments'][0]['attemptId'])->toBe($attempt->id)
         ->and(DB::connection(config('database.default'))->table(PaymentAttempt::TABLE)->count())->toBe(0);
+    config(['nvl-payments.connection' => null]);
 });

@@ -76,6 +76,9 @@ final class PaymentRefunds
         }
         $reference = $attempt->stripe_payment_intent_id ?? $attempt->stripe_charge_id ?? throw new DomainException('Missing Stripe payment identity.');
         $payment = $this->gateway->payment($reference);
+        if ($this->syncer->exceptionReason($attempt, $payment) !== null) {
+            throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Resolve the payment exception before refunding.');
+        }
         $this->syncer->assertMatches($attempt, $payment);
         $refunds = $this->gateway->refunds($reference);
         $operation = $connection->transaction(function () use ($attempt, $operationId, $actorId, $fingerprint, $amountMinor, $reason, $note, $payment, $refunds): PaymentOperation {
@@ -85,6 +88,9 @@ final class PaymentRefunds
             $operation = $this->journal->reserve('refund', $current->order_reference, $operationId, (string) $actorId, $fingerprint, $amountMinor);
             if (! $operation->wasRecentlyCreated) {
                 return $operation;
+            }
+            if ($this->syncer->exceptionReason($current, $payment) !== null) {
+                throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Resolve the payment exception before refunding.');
             }
             $this->syncer->assertMatches($current, $payment);
             if ($amountMinor > $this->balance->available($current, $payment, $refunds, $attempt->refunded_amount_minor)) {
@@ -114,8 +120,8 @@ final class PaymentRefunds
                 $this->journal->complete($operation, $result['refundId']);
             }, 5);
         } catch (InvalidRequestException|ProviderRefused $exception) {
-            $status = $exception instanceof ProviderRefused ? $exception->httpStatus : $exception->getHttpStatus();
             $code = $exception instanceof ProviderRefused ? $exception->stripeCode : $exception->getStripeCode();
+            $status = $exception instanceof ProviderRefused ? $exception->httpStatus : $exception->getHttpStatus();
             if ($status === 400 && in_array($code, ['charge_already_refunded', 'amount_too_large'], true)) {
                 $connection->transaction(function () use ($attempt, $refund, $operation): void {
                     PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->update(['id' => $attempt->id]);

@@ -57,13 +57,14 @@ it('creates a correlated one-time checkout from server minor units', function (s
     $request = end($this->transport->requests);
     expect($result['sessionId'])->toBe('cs_one')->and($result['expiresAt']->timestamp)->toBe(1800000000)
         ->and($request['params']['mode'])->toBe('payment')
+        ->and($request['params']['allowed_payment_method_types'])->toBe(['card'])
         ->and($request['params']['line_items'][0]['price_data']['unit_amount'])->toBe(1200)
         ->and($request['params']['line_items'][0]['price_data']['currency'])->toBe('eur')
         ->and($request['params']['payment_intent_data']['metadata'])->toBe($this->session['metadata'] + ['payment_operation_key' => 'checkout-key'])
         ->and($request['params']['metadata'])->toBe($this->session['metadata'] + ['payment_operation_key' => 'checkout-key'])
         ->and($request['params']['payment_intent_data']['capture_method'])->toBe($capture)
         ->and($request['headers'])->toContain('Idempotency-Key: checkout-key');
-})->with(['automatic', 'manual']);
+})->with(['automatic', 'automatic_async', 'manual']);
 
 it('rejects unsupported manual capture methods before transport', function (): void {
     $gateway = new StripePaymentGateway(new StripeClient('sk_test_fake'), 'acct_expected', false, ['ideal']);
@@ -108,7 +109,7 @@ it('retrieves checkout state and expires with an explicit key', function (): voi
 });
 
 it('captures with the Stripe default final capture and cancels with explicit keys', function (): void {
-    $this->transport->responses = [$this->intent, $this->intent, $this->intent, $this->intent];
+    $this->transport->responses = [$this->intent, $this->intent, array_replace($this->intent, ['status' => 'requires_capture']), array_replace($this->intent, ['status' => 'canceled'])];
     expect($this->gateway->capture('pi_one', 1000, 'capture-key')['capturedAmountMinor'])->toBe(1000);
     $request = end($this->transport->requests);
     expect($request['params']['amount_to_capture'])->toBe(1000)->and($request['params'])->not->toHaveKey('final_capture')->and($request['headers'])->toContain('Idempotency-Key: capture-key');
@@ -165,6 +166,36 @@ it('writes and retrieves the persisted refund operation proof through Stripe met
     expect($request['method'])->toBe('post')->and($request['absUrl'])->toEndWith('/v1/refunds')
         ->and($request['params']['metadata']['payment_operation_key'])->toBe('refund-key')->and($result['operationKey'])->toBe('refund-key');
     expect($this->gateway->refunds('pi_one')[0]['operationKey'])->toBe('refund-key');
+});
+
+it('creates an exact Payment Element intent with the Stripe allowlist and expanded card facts', function (): void {
+    $charge = array_replace($this->charge, ['created' => 1820000000, 'payment_method_details' => ['type' => 'card', 'card' => ['brand' => 'visa', 'last4' => '4242', 'exp_month' => 8, 'exp_year' => 2030, 'wallet' => ['type' => 'apple_pay']]]]);
+    $this->transport->responses[] = array_replace($this->intent, ['latest_charge' => $charge, 'client_secret' => 'pi_one_secret_test', 'capture_method' => 'automatic_async']);
+    $result = $this->gateway->createIntent(new OrderPaymentSnapshot('order-1', 'rev-2', 1000, 'EUR', 'Order 1', null, true), 'automatic_async', ['card'], null, 'intent-key');
+    $request = end($this->transport->requests);
+    expect($request['params'])->toMatchArray(['amount' => 1000, 'currency' => 'eur', 'capture_method' => 'automatic_async', 'allowed_payment_method_types' => ['card'], 'expand' => ['latest_charge']])
+        ->not->toHaveKey('payment_method_types');
+    expect($result)->toMatchArray(['clientSecret' => 'pi_one_secret_test', 'chargeId' => 'ch_one', 'cardBrand' => 'visa', 'cardLastFour' => '4242', 'cardExpiryMonth' => 8, 'cardExpiryYear' => 2030, 'wallet' => 'apple_pay']);
+});
+
+it('blocks a live key before even looking up its account', function (): void {
+    $gateway = new StripePaymentGateway(new StripeClient('rk_live_example'), 'acct_expected', true);
+    expect(fn () => $gateway->payment('pi_one'))->toThrow(ProviderRefused::class);
+    expect($this->transport->requests)->toBeEmpty();
+});
+
+it('re-reads a Stripe cancellation race and avoids canceling terminal or processing states', function (): void {
+    $this->transport->responses = [
+        array_replace($this->intent, ['status' => 'requires_action']),
+        ['error' => ['type' => 'invalid_request_error', 'code' => 'payment_intent_unexpected_state', 'message' => 'State changed.']],
+        $this->intent,
+        array_replace($this->intent, ['status' => 'processing']),
+        array_replace($this->intent, ['status' => 'canceled']),
+    ];
+    expect($this->gateway->cancel('pi_one', 'cancel-key')['status'])->toBe('succeeded')
+        ->and($this->gateway->cancel('pi_one', 'cancel-key')['status'])->toBe('processing')
+        ->and($this->gateway->cancel('pi_one', 'cancel-key')['status'])->toBe('canceled');
+    expect(array_keys(array_filter(array_column($this->transport->requests, 'method'), fn ($method) => $method === 'post')))->toHaveCount(1);
 });
 
 it('classifies Stripe HTTP failures and preserves only their public identifiers', function (int $status, string $class): void {

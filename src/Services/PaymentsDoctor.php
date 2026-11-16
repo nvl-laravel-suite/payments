@@ -44,7 +44,7 @@ final class PaymentsDoctor
             'stripe_mode' => is_string($key) && PaymentsAvailability::allowsKey($key),
             'currencies' => is_array(config('nvl-payments.allowed_currencies')) && config('nvl-payments.allowed_currencies') !== [],
             'return_hosts' => is_array(config('nvl-payments.checkout.return_hosts')) && config('nvl-payments.checkout.return_hosts') !== [],
-            'capture_method' => in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'manual'], true),
+            'capture_method' => in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'automatic_async', 'manual'], true),
             'order_provider' => ! $orders instanceof DenyPaymentOrderProvider,
             'management_access' => ! $access instanceof DenyPaymentManagementAccess,
             'financial_attempt_columns' => false,

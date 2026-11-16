@@ -16,12 +16,16 @@
                 "checkout.capture_method",
                 "checkout.expires_in_minutes",
                 "checkout.return_hosts",
+                "embedded.allowed_payment_method_types",
+                "embedded.capture_method",
+                "embedded.expires_in_minutes",
                 "migrations.allow_destructive_rollback",
                 "minimum_amounts",
                 "reconciliation.batch_size",
                 "reconciliation.max_attempts",
                 "stripe.account_id",
                 "stripe.livemode",
+                "stripe.publishable_key",
                 "stripe.secret",
                 "stripe.webhook_secret"
             ]

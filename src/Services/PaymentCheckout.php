@@ -59,6 +59,9 @@ final class PaymentCheckout
         $order = $this->orders->resolve($orderReference);
         $actor = $this->scope->resolveActor($order, $actor);
         $this->access->assertCanManage($actor, 'start_checkout', $order);
+        if ($order->reference !== $orderReference) {
+            throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Order provider returned a different order.');
+        }
         $this->validate($order, $successUrl, $cancelUrl);
         $connection = (PaymentsModelRegistry::newAttempt())->getConnection();
         if ($connection->transactionLevel() !== 0) {
@@ -79,6 +82,9 @@ final class PaymentCheckout
                     'capture_method' => config('nvl-payments.checkout.capture_method', 'automatic'),
                     'expires_at' => CarbonImmutable::now()->addMinutes(config()->integer('nvl-payments.checkout.expires_in_minutes')),
                 ]);
+                if ($attempt->origin !== 'checkout') {
+                    throw PaymentsException::because(PaymentsResponseCode::CheckoutConflict, 'An embedded payment already reserves the order.');
+                }
                 if (PaymentsModelRegistry::attemptQuery()->where('order_reference', $order->reference)->whereKeyNot($attempt->id)->whereIn('state', ['processing', 'authorized', 'captured', 'partially_refunded', 'refunded', 'payment_exception'])->exists()) {
                     throw PaymentsException::because(PaymentsResponseCode::CheckoutConflict, 'An existing payment blocks another checkout.');
                 }
@@ -224,7 +230,7 @@ final class PaymentCheckout
         if (! $order->payable || ! in_array(strtoupper($order->currency), config()->array('nvl-payments.allowed_currencies'), true)) {
             throw PaymentsException::because(PaymentsResponseCode::PaymentStateInvalid, 'Order is not payable with the configured currency.');
         }
-        if (! in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'manual'], true) || config()->integer('nvl-payments.checkout.expires_in_minutes') < 30 || config()->integer('nvl-payments.checkout.expires_in_minutes') > 1440) {
+        if (! in_array(config('nvl-payments.checkout.capture_method'), ['automatic', 'automatic_async', 'manual'], true) || config()->integer('nvl-payments.checkout.expires_in_minutes') < 30 || config()->integer('nvl-payments.checkout.expires_in_minutes') > 1440) {
             throw PaymentsException::because(PaymentsResponseCode::InvalidConfiguration, 'Invalid Checkout capture method or expiration interval.');
         }
         $minimum = config('nvl-payments.minimum_amounts.'.strtoupper($order->currency), 1);

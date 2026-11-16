@@ -34,6 +34,7 @@ it('creates four UUID-backed tables with the expected payment references', funct
 
     expect(Schema::hasColumns(PaymentsTables::Attempts, [
         'reservation_key', 'stripe_checkout_session_id', 'stripe_payment_intent_id', 'stripe_charge_id',
+        'embedded_methods', 'exception_reason', 'card_brand', 'card_last_four', 'card_expiry_month', 'card_expiry_year', 'card_wallet',
     ]))->toBeTrue();
 });
 
@@ -104,5 +105,19 @@ it('uniquely indexes Stripe references and durable operation identities', functi
         foreach ($columns as $column) {
             expect($indexed)->toContain($column);
         }
+    }
+});
+
+it('requires explicit opt-in before removing payment storage or embedded attempt fields', function (): void {
+    config(['nvl-payments.migrations.allow_destructive_rollback' => false]);
+
+    try {
+        foreach (glob(__DIR__.'/../../database/migrations/payments/*.php') ?: [] as $file) {
+            $migration = require $file;
+            expect(fn () => $migration->down())->toThrow(LogicException::class, 'allow_destructive_rollback');
+        }
+        expect(Schema::hasColumn(PaymentsTables::Attempts, 'exception_reason'))->toBeTrue();
+    } finally {
+        config(['nvl-payments.migrations.allow_destructive_rollback' => true]);
     }
 });

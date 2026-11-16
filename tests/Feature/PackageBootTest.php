@@ -39,6 +39,7 @@ it('discovers the package without activating routes or vendor migrations', funct
 it('exposes the isolated checkout and Stripe configuration defaults', function (): void {
     expect(config('nvl-payments.stripe'))->toMatchArray([
         'secret' => null,
+        'publishable_key' => null,
         'webhook_secret' => null,
         'account_id' => null,
         'livemode' => false,
@@ -87,7 +88,8 @@ it('resolves the default gateway from Payments credentials account and mode', fu
     config()->set('nvl-payments.stripe', ['secret' => 'sk_live_payments_only', 'account_id' => 'acct_configured', 'livemode' => true]);
     $transport = Mockery::mock(ClientInterface::class);
     $transport->shouldReceive('request')->once()->withArgs(function ($method, $url, $headers): bool {
-        return $method === 'get' && str_ends_with($url, '/v1/account') && in_array('Authorization: Bearer sk_live_payments_only', $headers, true);
+        return $method === 'get' && str_ends_with($url, '/v1/account') && in_array('Authorization: Bearer sk_live_payments_only', $headers, true)
+            && in_array('Stripe-Version: '.StripePaymentGateway::API_VERSION, $headers, true);
     })->andReturn([json_encode(['object' => 'account', 'id' => 'acct_configured']), 200, []]);
     $transport->shouldReceive('request')->once()->withArgs(fn ($method, $url): bool => $method === 'get' && str_ends_with($url, '/v1/payment_intents/pi_configured'))
         ->andReturn([json_encode(['object' => 'payment_intent', 'id' => 'pi_configured', 'livemode' => true, 'amount' => 100, 'amount_received' => 100, 'currency' => 'eur', 'status' => 'succeeded', 'capture_method' => 'automatic', 'latest_charge' => null]), 200, []]);

@@ -6,8 +6,9 @@ namespace Nvl\Payments\Services;
 
 use Carbon\CarbonImmutable;
 use Closure;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
-use Nvl\Payments\Contracts\PaymentGateway;
+use Nvl\Payments\Contracts\PaymentIntentGateway;
 use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Exceptions\ProviderUnavailable;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
@@ -28,11 +29,14 @@ use UnexpectedValueException;
  * @phpstan-import-type StripeCheckoutState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripePaymentState from \Nvl\Payments\Contracts\PaymentGateway
  * @phpstan-import-type StripeRefundState from \Nvl\Payments\Contracts\PaymentGateway
+ * @phpstan-import-type StripeIntentState from \Nvl\Payments\Contracts\PaymentIntentGateway
  *
  * @internal
  */
-final class StripePaymentGateway implements PaymentGateway
+final class StripePaymentGateway implements PaymentIntentGateway
 {
+    public const string API_VERSION = '2026-10-28.endive';
+
     /** @param list<string> $paymentMethodTypes Explicit Checkout methods; manual capture is limited to cards. */
     public function __construct(
         private readonly StripeClient $client,
@@ -46,14 +50,14 @@ final class StripePaymentGateway implements PaymentGateway
      */
     public function createCheckout(OrderPaymentSnapshot $order, string $captureMethod, string $successUrl, string $cancelUrl, CarbonImmutable $expiresAt, string $idempotencyKey): array
     {
-        if (! in_array($captureMethod, ['automatic', 'manual'], true) || $this->paymentMethodTypes === [] || ($captureMethod === 'manual' && array_diff($this->paymentMethodTypes, ['card']) !== [])) {
+        if (! in_array($captureMethod, ['automatic', 'automatic_async', 'manual'], true) || $this->paymentMethodTypes === [] || ($captureMethod === 'manual' && array_diff($this->paymentMethodTypes, ['card']) !== [])) {
             throw new InvalidArgumentException('Unsupported capture method or payment method combination.');
         }
         $options = $this->options($idempotencyKey);
         $this->verifyAccount();
         $metadata = ['order_reference' => $order->reference, 'order_revision' => $order->revision, 'payment_operation_key' => $idempotencyKey];
         $params = [
-            'mode' => 'payment', 'payment_method_types' => $this->paymentMethodTypes,
+            'mode' => 'payment', 'allowed_payment_method_types' => $this->paymentMethodTypes,
             'success_url' => $successUrl, 'cancel_url' => $cancelUrl, 'expires_at' => $expiresAt->getTimestamp(),
             'client_reference_id' => $order->reference, 'metadata' => $metadata,
             'payment_intent_data' => ['capture_method' => $captureMethod, 'metadata' => $metadata],
@@ -62,7 +66,7 @@ final class StripePaymentGateway implements PaymentGateway
         if ($order->email !== null) {
             $params['customer_email'] = $order->email;
         }
-        $session = $this->request(fn () => $this->client->checkout->sessions->create($params, $options));
+        $session = $this->request('create_checkout', fn () => $this->client->checkout->sessions->create($params, $options));
         $this->verifyMode($session);
 
         return ['sessionId' => $session->id, 'url' => $session->url ?? throw new UnexpectedValueException('Stripe returned no hosted URL.'), 'expiresAt' => CarbonImmutable::createFromTimestampUTC($session->expires_at)];
@@ -72,7 +76,7 @@ final class StripePaymentGateway implements PaymentGateway
     {
         $options = $this->options($idempotencyKey);
         $this->checkout($sessionId);
-        $this->verifyMode($this->request(fn () => $this->client->checkout->sessions->expire($sessionId, [], $options)));
+        $this->verifyMode($this->request('expire_checkout', fn () => $this->client->checkout->sessions->expire($sessionId, [], $options)));
     }
 
     /**
@@ -81,7 +85,7 @@ final class StripePaymentGateway implements PaymentGateway
     public function checkout(string $sessionId): array
     {
         $this->verifyAccount();
-        $session = $this->request(fn () => $this->client->checkout->sessions->retrieve($sessionId));
+        $session = $this->request('retrieve_checkout', fn () => $this->client->checkout->sessions->retrieve($sessionId));
         $this->verifyMode($session);
         if ($session->mode !== 'payment') {
             throw new UnexpectedValueException('Checkout Session is not a one-time payment.');
@@ -100,7 +104,7 @@ final class StripePaymentGateway implements PaymentGateway
             return $this->intentState($payment);
         }
 
-        return ['paymentIntentId' => null, 'chargeId' => $payment->id, 'accountId' => $this->accountId, 'livemode' => $payment->livemode, 'amountMinor' => $payment->amount, 'capturedAmountMinor' => $payment->amount_captured, ...$this->capturedRefundFacts($payment), 'currency' => $payment->currency, 'status' => $payment->captured ? $payment->status : ($payment->status === 'succeeded' ? 'requires_capture' : $payment->status), 'captureMethod' => $payment->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null];
+        return ['paymentIntentId' => null, 'chargeId' => $payment->id, 'accountId' => $this->accountId, 'livemode' => $payment->livemode, 'amountMinor' => $payment->amount, 'capturedAmountMinor' => $payment->amount_captured, ...$this->capturedRefundFacts($payment), 'currency' => $payment->currency, 'status' => $payment->captured ? $payment->status : ($payment->status === 'succeeded' ? 'requires_capture' : $payment->status), 'captureMethod' => $payment->captured ? 'automatic' : 'manual', 'amountCapturableMinor' => null, 'paymentMethodType' => null, 'partialAuthorizationStatus' => null, ...$this->chargeDetails($payment)];
     }
 
     /**
@@ -110,7 +114,7 @@ final class StripePaymentGateway implements PaymentGateway
     {
         if (str_starts_with($reference, 'txn_')) {
             $this->verifyAccount();
-            $transaction = $this->request(fn () => $this->client->balanceTransactions->retrieve($reference));
+            $transaction = $this->request('retrieve_balance_transaction', fn () => $this->client->balanceTransactions->retrieve($reference));
             $source = $this->reference($transaction->source);
             if (! in_array($transaction->type, ['charge', 'payment'], true) || $source === null || ! str_starts_with($source, 'ch_')) {
                 throw new InvalidArgumentException('Balance transaction does not refer to a payment.');
@@ -131,7 +135,7 @@ final class StripePaymentGateway implements PaymentGateway
         $this->requireIntent($paymentIntentId);
         $this->payment($paymentIntentId);
 
-        return $this->intentState($this->request(fn () => $this->client->paymentIntents->capture($paymentIntentId, ['amount_to_capture' => $amountMinor, 'expand' => ['latest_charge']], $options)));
+        return $this->intentState($this->request('capture_intent', fn () => $this->client->paymentIntents->capture($paymentIntentId, ['amount_to_capture' => $amountMinor, 'expand' => ['latest_charge']], $options)));
     }
 
     /**
@@ -141,9 +145,20 @@ final class StripePaymentGateway implements PaymentGateway
     {
         $options = $this->options($idempotencyKey);
         $this->requireIntent($paymentIntentId);
-        $this->payment($paymentIntentId);
+        $payment = $this->payment($paymentIntentId);
+        if (! in_array($payment['status'], ['requires_payment_method', 'requires_capture', 'requires_confirmation', 'requires_action'], true)) {
+            return $payment;
+        }
 
-        return $this->intentState($this->request(fn () => $this->client->paymentIntents->cancel($paymentIntentId, ['expand' => ['latest_charge']], $options)));
+        try {
+            return $this->intentState($this->request('cancel_intent', fn () => $this->client->paymentIntents->cancel($paymentIntentId, ['expand' => ['latest_charge']], $options)));
+        } catch (ProviderRefused $failure) {
+            if ($failure->stripeCode !== 'payment_intent_unexpected_state') {
+                throw $failure;
+            }
+
+            return $this->payment($paymentIntentId);
+        }
     }
 
     /**
@@ -158,8 +173,9 @@ final class StripePaymentGateway implements PaymentGateway
             throw new InvalidArgumentException('Unsupported Stripe refund reason.');
         }
         $payment = $this->payment($paymentId);
+        $params = $this->paymentFilter($paymentId) + ['amount' => $amountMinor, 'reason' => $reason, 'metadata' => ['payment_operation_key' => $idempotencyKey]];
 
-        return $this->refundState($this->request(fn () => $this->client->refunds->create(array_merge($this->paymentFilter($paymentId), ['amount' => $amountMinor, 'reason' => $reason, 'metadata' => ['payment_operation_key' => $idempotencyKey]]), $options)), $payment['livemode']);
+        return $this->refundState($this->request('create_refund', fn () => $this->client->refunds->create($params, $options)), $payment['livemode']);
     }
 
     /**
@@ -184,15 +200,76 @@ final class StripePaymentGateway implements PaymentGateway
         return $states;
     }
 
+    /** @return StripeIntentState */
+    public function createIntent(OrderPaymentSnapshot $order, string $captureMethod, array $allowedMethods, ?string $customerId, string $idempotencyKey): array
+    {
+        $options = $this->options($idempotencyKey);
+        $this->verifyAccount();
+        $params = [
+            'amount' => $order->amountMinor,
+            'currency' => strtolower($order->currency),
+            'capture_method' => $captureMethod,
+            'allowed_payment_method_types' => $allowedMethods,
+            'expand' => ['latest_charge'],
+            'metadata' => ['payment_operation_key' => $idempotencyKey],
+        ];
+        if ($customerId !== null) {
+            $params['customer'] = $customerId;
+        }
+        $intent = $this->request('create_intent', fn () => $this->client->paymentIntents->create($params, $options));
+
+        return $this->elementState($intent);
+    }
+
+    /** @return StripeIntentState */
+    public function intent(string $intentId): array
+    {
+        $this->requireIntent($intentId);
+        $intent = $this->retrievePayment($intentId);
+        if (! $intent instanceof PaymentIntent) {
+            throw new UnexpectedValueException('Expected a PaymentIntent.');
+        }
+
+        return $this->elementState($intent);
+    }
+
+    /** @return StripeIntentState */
+    private function elementState(PaymentIntent $intent): array
+    {
+        return $this->intentState($intent) + [
+            'clientSecret' => $intent->client_secret,
+            'operationKey' => $this->metadataString($intent->metadata ?? null, 'payment_operation_key'),
+        ];
+    }
+
+    /** @return array{cardBrand:?string,cardLastFour:?string,cardExpiryMonth:?int,cardExpiryYear:?int,wallet:?string} */
+    private function chargeDetails(?Charge $charge): array
+    {
+        $details = $charge->payment_method_details ?? null;
+        $card = $details['card'] ?? null;
+        $brand = $card instanceof StripeObject ? $card['brand'] : null;
+        $lastFour = $card instanceof StripeObject ? $card['last4'] : null;
+        $month = $card instanceof StripeObject ? $card['exp_month'] : null;
+        $year = $card instanceof StripeObject ? $card['exp_year'] : null;
+        $wallet = $card instanceof StripeObject ? $card['wallet'] : null;
+        $walletType = $wallet instanceof StripeObject ? $wallet['type'] : null;
+
+        return [
+            'cardBrand' => is_string($brand) ? $brand : null,
+            'cardLastFour' => is_string($lastFour) ? $lastFour : null,
+            'cardExpiryMonth' => is_int($month) ? $month : null,
+            'cardExpiryYear' => is_int($year) ? $year : null,
+            'wallet' => is_string($walletType) ? $walletType : null,
+        ];
+    }
+
     /**
-     * Guard transport and expose safe, typed provider failures.
-     *
      * @template T
      *
      * @param  Closure():T  $send
      * @return T
      */
-    private function request(Closure $send): mixed
+    private function request(string $operation, Closure $send): mixed
     {
         if (app()->bound('db')) {
             PaymentsAvailability::assertOutsideTransaction();
@@ -213,11 +290,14 @@ final class StripePaymentGateway implements PaymentGateway
         } catch (ApiErrorException $failure) {
             $status = $failure->getHttpStatus();
             $code = $failure->getStripeCode();
-            if ($failure instanceof ApiConnectionException || $status === null || $status === 429 || $status >= 500) {
-                throw new ProviderUnavailable($code, $status);
+            $retryable = $failure instanceof ApiConnectionException || $status === null || $status === 429 || $status >= 500;
+            if (app()->bound('log')) {
+                Log::warning($retryable ? 'payments.provider_unavailable' : 'payments.provider_refused', [
+                    'operation' => $operation, 'stripe_code' => $code, 'http_status' => $status,
+                ]);
             }
 
-            throw new ProviderRefused($code, $status);
+            throw $retryable ? new ProviderUnavailable($code, $status) : new ProviderRefused($code, $status);
         }
     }
 
@@ -227,12 +307,12 @@ final class StripePaymentGateway implements PaymentGateway
         $field = $this->paymentField($paymentReference);
         $this->verifyAccount();
         if ($field === 'payment_intent') {
-            $intent = $this->request(fn () => $this->client->paymentIntents->retrieve($paymentReference, ['expand' => ['latest_charge']]));
+            $intent = $this->request('retrieve_intent', fn () => $this->client->paymentIntents->retrieve($paymentReference, ['expand' => ['latest_charge']]));
             $this->verifyMode($intent);
 
             return $intent;
         }
-        $charge = $this->request(fn () => $this->client->charges->retrieve($paymentReference));
+        $charge = $this->request('retrieve_charge', fn () => $this->client->charges->retrieve($paymentReference));
         $this->verifyMode($charge);
         if ($charge->payment_intent !== null) {
             return $this->retrievePayment($this->reference($charge->payment_intent) ?? throw new UnexpectedValueException('Missing PaymentIntent ID.'));
@@ -244,7 +324,8 @@ final class StripePaymentGateway implements PaymentGateway
     /** Verify the actual account belonging to the injected credential. */
     private function verifyAccount(): void
     {
-        if ($this->accountId === '' || $this->request(fn () => $this->client->accounts->retrieve())->id !== $this->accountId) {
+        $account = $this->request('retrieve_account', fn () => $this->client->accounts->retrieve());
+        if ($this->accountId === '' || $account->id !== $this->accountId) {
             throw new UnexpectedValueException('Stripe credential account does not match Payments configuration.');
         }
     }
@@ -271,7 +352,9 @@ final class StripePaymentGateway implements PaymentGateway
         $partialAuthorization = $card instanceof StripeObject ? $card['partial_authorization'] : null;
         $partialStatus = $partialAuthorization instanceof StripeObject ? $partialAuthorization['status'] : null;
 
-        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, ...($charge === null ? ['refundedAmountMinor' => 0] : $this->capturedRefundFacts($charge)), 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null];
+        return ['paymentIntentId' => $intent->id, 'chargeId' => $this->reference($charge), 'accountId' => $this->accountId, 'livemode' => $intent->livemode, 'amountMinor' => $intent->amount, 'capturedAmountMinor' => $intent->amount_received, ...($charge === null ? ['refundedAmountMinor' => 0] : $this->capturedRefundFacts($charge)), 'currency' => $intent->currency, 'status' => $intent->status, 'captureMethod' => $intent->capture_method, 'amountCapturableMinor' => is_int($capturable) ? $capturable : null, 'paymentMethodType' => is_string($method) ? $method : null, 'partialAuthorizationStatus' => is_string($partialStatus) ? $partialStatus : null, ...$this->chargeDetails($charge),
+            'failureCode' => $intent->last_payment_error->decline_code ?? $intent->last_payment_error->code ?? null,
+        ];
     }
 
     /** Return the Charge after checking that it belongs to the configured Stripe mode. */
@@ -279,7 +362,7 @@ final class StripePaymentGateway implements PaymentGateway
     {
         $charge = $intent->latest_charge;
         if (is_string($charge)) {
-            $charge = $this->request(fn () => $this->client->charges->retrieve($charge));
+            $charge = $this->request('retrieve_charge', fn () => $this->client->charges->retrieve($charge));
         }
         if ($charge !== null) {
             $this->verifyMode($charge);
@@ -323,7 +406,7 @@ final class StripePaymentGateway implements PaymentGateway
             $parameters['expand'] = ['data.balance_transaction'];
         }
 
-        return $this->request(fn () => iterator_to_array($this->client->refunds->all($parameters)->autoPagingIterator(), false));
+        return $this->request('list_refunds', fn () => iterator_to_array($this->client->refunds->all($parameters)->autoPagingIterator(), false));
     }
 
     /** Identify the accounting reversal without inferring its purpose from the amount. */
@@ -331,7 +414,7 @@ final class StripePaymentGateway implements PaymentGateway
     {
         $transaction = $refund->balance_transaction;
         if (is_string($transaction)) {
-            $transaction = $this->request(fn () => $this->client->balanceTransactions->retrieve($transaction));
+            $transaction = $this->request('retrieve_balance_transaction', fn () => $this->client->balanceTransactions->retrieve($transaction));
         }
 
         return $transaction instanceof BalanceTransaction && $transaction->reporting_category === 'partial_capture_reversal';
