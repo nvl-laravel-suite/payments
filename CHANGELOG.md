@@ -5,9 +5,17 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+## [7.3.0] - 2026-11-16
+
 - Deliver versioned payment and refund facts after the outer Payments commit through a durable, replayable outbox.
 - Allow refunds against a stored payment attempt or Charge ID, retain host reason codes, and preserve per-payment reservation caps.
 - Record refund lifecycle transitions and recover failed ledger deliveries using the same fact IDs.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- project ledger facts and extend per-payment refunds
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.2.0] - 2026-11-16
 
