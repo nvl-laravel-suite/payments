@@ -15,6 +15,9 @@ use Nvl\Support\Ownership\ValueObjects\OwnerReference;
  */
 final readonly class OrderPaymentSnapshot implements JsonSerializable
 {
+    /** Characters the native `varchar(255)` order identity columns store exactly on every supported driver. */
+    private const int MAX_IDENTITY_LENGTH = 255;
+
     /** Validate the order facts supplied by the host. */
     public function __construct(
         public string $reference,
@@ -26,8 +29,11 @@ final readonly class OrderPaymentSnapshot implements JsonSerializable
         public bool $payable,
         public ?OwnerReference $owner = null,
     ) {
-        if (trim($this->reference) === '' || trim($this->revision) === '') {
-            throw new InvalidArgumentException('Order reference and revision must be nonblank.');
+        foreach ([$this->reference, $this->revision] as $identity) {
+            // The /u modifier fails on invalid UTF-8 and counts code points for the length bound.
+            if (preg_match('/\A[^\x00]{1,'.self::MAX_IDENTITY_LENGTH.'}\z/u', $identity) !== 1 || trim($identity) === '') {
+                throw new InvalidArgumentException('Order reference and revision must be nonblank UTF-8 without NUL bytes and at most 255 characters.');
+            }
         }
 
         if ($this->amountMinor <= 0) {

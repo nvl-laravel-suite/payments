@@ -88,7 +88,7 @@ class EmbeddedPayments
                             'embedded_customer' => $customer,
                             'stripe_account_id' => config('nvl-payments.stripe.account_id'),
                             'stripe_livemode' => config('nvl-payments.stripe.livemode'),
-                            'expires_at' => now()->addMinutes($expiry),
+                            'expires_at' => CarbonImmutable::now('UTC')->startOfSecond()->addMinutes($expiry),
                         ]);
                         $attempt->forceFill(['id' => $attemptReference])->save();
                     }

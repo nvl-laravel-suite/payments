@@ -19,6 +19,7 @@ use Nvl\Payments\Exceptions\PaymentsException;
 use Nvl\Payments\Exceptions\ProviderRefused;
 use Nvl\Payments\Models\PaymentAttempt;
 use Nvl\Payments\Models\PaymentOperation;
+use Nvl\Payments\Support\PaymentInstantCast;
 use Nvl\Payments\ValueObjects\OrderPaymentSnapshot;
 use Stripe\Exception\AuthenticationException;
 use Stripe\Exception\InvalidRequestException;
@@ -81,7 +82,7 @@ class PaymentCheckout
                     'amount_minor' => $order->amountMinor, 'currency' => strtoupper($order->currency),
                     'origin' => 'checkout', 'state' => 'reserved',
                     'capture_method' => config('nvl-payments.checkout.capture_method', 'automatic'),
-                    'expires_at' => CarbonImmutable::now()->addMinutes(config()->integer('nvl-payments.checkout.expires_in_minutes')),
+                    'expires_at' => CarbonImmutable::now('UTC')->startOfSecond()->addMinutes(config()->integer('nvl-payments.checkout.expires_in_minutes')),
                 ]);
                 if ($attempt->origin !== 'checkout') {
                     throw PaymentsException::because(PaymentsResponseCode::CheckoutConflict, 'An embedded payment already reserves the order.');
@@ -262,8 +263,7 @@ class PaymentCheckout
             $attempt->getConnection()->transaction(function () use ($attempt, $operation, $checkout): void {
                 PaymentsModelRegistry::attemptQuery()->whereKey($attempt->id)->where('state', 'reserved')->update([
                     'state' => 'open', 'stripe_checkout_session_id' => $checkout['sessionId'],
-                    // Eloquent stores wall-clock time; convert the provider's UTC instant to the application zone first.
-                    'checkout_url' => $checkout['url'], 'expires_at' => $checkout['expiresAt']->setTimezone(date_default_timezone_get()),
+                    'checkout_url' => $checkout['url'], 'expires_at' => PaymentInstantCast::store($checkout['expiresAt']),
                 ]);
                 $this->journal->complete($operation, $checkout['sessionId']);
             }, 5);

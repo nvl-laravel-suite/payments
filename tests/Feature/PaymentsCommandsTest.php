@@ -26,7 +26,7 @@ it('reports readiness without printing secrets', function (): void {
     config(['nvl-payments.stripe.secret' => 'sk_test_do_not_print', 'nvl-payments.stripe.webhook_secret' => 'whsec_do_not_print']);
     $code = Artisan::call('nvl:payments:doctor', ['--strict' => true, '--format' => 'json']);
     $output = Artisan::output();
-    expect($code)->toBe(1)->and($output)->not->toContain('sk_test_do_not_print', 'whsec_do_not_print');
+    expect($code)->toBe(1)->and($output)->not->toContain('sk_test_do_not_print')->not->toContain('whsec_do_not_print');
     expect(json_decode($output, true, flags: JSON_THROW_ON_ERROR))->toHaveKey('checks');
 });
 
@@ -65,7 +65,7 @@ it('sanitizes failed reconciliation output and continues the sweep', function ()
     $gateway = Mockery::mock(PaymentGateway::class);
     $gateway->shouldReceive('payment')->andThrow(new RuntimeException('sk_test_secret whsec_secret'));
     app()->instance(PaymentGateway::class, $gateway);
-    expect(Artisan::call('nvl:payments:reconcile'))->toBe(1)->and(Artisan::output())->not->toContain('sk_test_secret', 'whsec_secret');
+    expect(Artisan::call('nvl:payments:reconcile'))->toBe(1)->and(Artisan::output())->not->toContain('sk_test_secret')->not->toContain('whsec_secret');
 });
 
 it('reports a ready local installation in strict mode', function (): void {
@@ -76,7 +76,7 @@ it('reports a ready local installation in strict mode', function (): void {
     expect(Route::has('nvl.payments.webhook'))->toBeFalse();
     expect(Artisan::call('nvl:payments:doctor', ['--strict' => true]))->toBe(0);
     $output = Artisan::output();
-    expect($output)->not->toContain('webhook_route', 'sk_test_private', 'whsec_private');
+    expect($output)->not->toContain('webhook_route')->not->toContain('sk_test_private')->not->toContain('whsec_private');
 });
 
 it('rejects a malformed target without printing it', function (): void {
@@ -126,7 +126,7 @@ describe('local ledger readiness', function (): void {
         $checks = json_decode($output, true, flags: JSON_THROW_ON_ERROR)['checks'];
 
         expect($checks['financial_attempt_amounts'])->toBeFalse()
-            ->and($output)->not->toContain($attempt->id, 'order-1', 'sk_test_ledger_private', 'whsec_ledger_private');
+            ->and($output)->not->toContain($attempt->id)->not->toContain('order-1')->not->toContain('sk_test_ledger_private')->not->toContain('whsec_ledger_private');
     })->with([
         'zero total' => [['amount_minor' => 0, 'captured_amount_minor' => 0, 'refunded_amount_minor' => 0]],
         'capture exceeds original total' => [['captured_amount_minor' => 1201]],
@@ -266,7 +266,7 @@ it('probes the Stripe account and exact webhook event set without printing secre
         expect($report['inbox'])->toMatchArray(['pending' => 0, 'failed' => 0, 'ignored' => 0, 'processed' => 0]);
         expect(Artisan::call('nvl:payments:doctor', ['--strict' => true, '--stripe' => true, '--format' => 'json']))->toBe(1);
         expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['checks']['stripe_webhook_registration'])->toBeFalse();
-        expect(Artisan::output())->not->toContain('sk_test_doctor', 'whsec_doctor');
+        expect(Artisan::output())->not->toContain('sk_test_doctor')->not->toContain('whsec_doctor');
     } finally {
         ApiRequestor::setHttpClient(new CurlClient);
     }

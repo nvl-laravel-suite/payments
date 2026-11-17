@@ -1,5 +1,19 @@
 # Upgrading NVL Payments
 
+## Unreleased · UTC payment expiry and validated order identities
+
+`nvl_payments_attempts.expires_at` is now stored as a UTC instant at second precision and read back as a UTC `Carbon` instance. Earlier releases stored the application-timezone wall clock. Hosts whose `app.timezone` has always been `UTC` need no data change. Any other host must convert existing rows once, during a write freeze (stop queue workers, webhooks and scheduled reconciliation) and before serving the new release, using the timezone the rows were written under. On PostgreSQL:
+
+```sql
+UPDATE nvl_payments_attempts
+SET expires_at = (expires_at AT TIME ZONE 'Europe/Sofia') AT TIME ZONE 'UTC'
+WHERE expires_at IS NOT NULL;
+```
+
+On SQLite, read each raw non-null value, parse it with `Carbon::parse($raw, $timezone)` and write `->utc()->format('Y-m-d H:i:s')`. Substitute your configured table name, connection and timezone. A wall clock written inside a daylight-saving overlap was already ambiguous; the conversion picks one offset, so reconcile open attempts expiring in that hour. Code that formats `expires_at` or the projected `expiresAt` without `->setTimezone(...)` now sees UTC values. `last_synced_at` and `last_reconcile_attempt_at` are unchanged.
+
+Host `PaymentOrderProvider` implementations must return order references and revisions that are nonblank valid UTF-8, contain no NUL byte and are at most 255 characters; other values now throw `InvalidArgumentException` from the `OrderPaymentSnapshot` constructor. Existing rows are unaffected.
+
 ## 7.5.0 · Public API, Stripe diagnostics and integration guides
 
 Set `webhooks.url` to the exact registered public HTTPS URL and run `nvl:payments:doctor --strict --stripe --format=json` before enabling live acceptance. Configure the expected Stripe country and default currency when required.

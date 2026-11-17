@@ -12,6 +12,7 @@ use Nvl\Payments\Database\Factories\PaymentAttemptFactory;
 use Nvl\Payments\Definitions\Tables\PaymentsTables;
 use Nvl\Payments\Models\Concerns\HasPaymentOwnership;
 use Nvl\Payments\Models\Concerns\UsesPaymentsConnection;
+use Nvl\Payments\Support\PaymentInstantCast;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 
@@ -90,7 +91,7 @@ class PaymentAttempt extends Model implements Ownable
             'captured_amount_minor' => 'integer',
             'refunded_amount_minor' => 'integer',
             'stripe_livemode' => 'boolean',
-            'expires_at' => 'datetime',
+            'expires_at' => PaymentInstantCast::class,
             'last_synced_at' => 'datetime',
             'last_reconcile_attempt_at' => 'datetime',
         ];

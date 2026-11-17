@@ -199,7 +199,7 @@ class PaymentReconciliation
                 throw PaymentsException::because(PaymentsResponseCode::ProviderIdentityMismatch, 'Checkout recovery requires the original operation metadata.');
             }
         }
-        $attempt->fill(['stripe_checkout_session_id' => $checkout['sessionId'], 'stripe_account_id' => $checkout['accountId'], 'stripe_livemode' => $checkout['livemode'], 'expires_at' => $checkout['expiresAt']->setTimezone(date_default_timezone_get()), 'last_synced_at' => now()]);
+        $attempt->fill(['stripe_checkout_session_id' => $checkout['sessionId'], 'stripe_account_id' => $checkout['accountId'], 'stripe_livemode' => $checkout['livemode'], 'expires_at' => $checkout['expiresAt'], 'last_synced_at' => now()]);
         if ($checkout['url'] !== null) {
             $attempt->checkout_url = $checkout['url'];
         }

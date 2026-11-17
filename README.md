@@ -24,7 +24,7 @@ Configure the Stripe secret, account ID, live/test mode, Payments-specific webho
 
 Bind these host integration contracts before resolving payment services:
 
-- `PaymentOrderProvider::resolve($reference)` supplies a validated `OrderPaymentSnapshot` with server-calculated integer minor units, currency and revision.
+- `PaymentOrderProvider::resolve($reference)` supplies a validated `OrderPaymentSnapshot` with server-calculated integer minor units, currency and revision. Its reference and revision must be nonblank valid UTF-8 without NUL bytes and at most 255 characters, so they are stored exactly; anything else throws `InvalidArgumentException` before any reservation or provider call.
 - `PaymentManagementAccess::assertCanManage($actor, $operation, $order)` enforces host permissions. Operation names are `start_checkout`, `recover_checkout`, `attach_existing`, `capture`, `cancel_authorization`, `refund`, `resolve_payment_exception`, `view`, `start_embedded`, `settle_embedded`, `close_embedded` and `recover_embedded`.
 - `ExistingPaymentOwnership::assertOwned($order, $payment)` verifies trusted evidence linking an imported Stripe payment to the host order. `$payment` is the documented native fact array in `PaymentGateway`.
 

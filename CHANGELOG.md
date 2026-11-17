@@ -5,6 +5,15 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `OrderPaymentSnapshot` rejects order references and revisions that are not valid UTF-8, contain NUL bytes or exceed 255 characters, before any reservation or provider call. Previously a NUL byte silently truncated the persisted immutable order identity while Stripe received the original value, and oversized values failed on PostgreSQL after side effects began.
+- Payment attempt `expires_at` is stored and read as a UTC instant (new internal `PaymentInstantCast`, also used by the hosted Checkout query update), and Checkout/embedded expiry windows are computed in UTC. With a non-UTC `app.timezone`, an expiry inside a daylight-saving fallback hour no longer reloads one hour off, and embedded windows starting in that hour are no longer extended by an hour.
+
+### Changed
+
+- `PaymentAttempt::$expires_at` and the projected `expiresAt` are now returned in UTC; the instants are unchanged. Existing rows written under a non-UTC `app.timezone` need a one-time conversion, see UPGRADING.
+
 ## [7.6.0] - 2026-11-16
 
 ### Changed
