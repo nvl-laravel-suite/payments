@@ -5,6 +5,8 @@ All notable changes to `nvl/payments` are documented here.
 
 ## [Unreleased]
 
+## [7.7.0] - 2026-11-17
+
 ### Fixed
 
 - `OrderPaymentSnapshot` rejects order references and revisions that are not valid UTF-8, contain NUL bytes or exceed 255 characters, before any reservation or provider call. Previously a NUL byte silently truncated the persisted immutable order identity while Stripe received the original value, and oversized values failed on PostgreSQL after side effects began.
@@ -13,6 +15,12 @@ All notable changes to `nvl/payments` are documented here.
 ### Changed
 
 - `PaymentAttempt::$expires_at` and the projected `expiresAt` are now returned in UTC; the instants are unchanged. Existing rows written under a non-UTC `app.timezone` need a one-time conversion, see UPGRADING.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- consumer-audit fixes across the suite, UTC timestamps, core/forms release ordering
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.6.0] - 2026-11-16
 
